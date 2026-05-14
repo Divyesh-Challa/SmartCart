@@ -1,0 +1,11 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+*.db
+*.sqlite3
+*.log
+smartcart/static/uploads/flyers/*
+!smartcart/static/uploads/flyers/.gitkeep
