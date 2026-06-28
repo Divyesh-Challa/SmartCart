@@ -1,0 +1,2140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="SmartCart">
+  <meta name="theme-color" content="#E7E7E7">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartCart: Grocery Intelligence & Route Optimizer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=Inter:wght@300;400;500;600&family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            canvas: '#E7E7E7',
+            ink: '#000000',
+            action: '#1A1A1A',
+            'muted-ink': '#525252',
+            border: '#A9A9A9',
+            'footer-surface': '#000000'
+          },
+          fontFamily: {
+            sans: ['"DM Sans"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+            display: ['"Visby CF"', '"Plus Jakarta Sans"', '"DM Sans"', 'sans-serif'],
+            meta: ['Inter', '-apple-system', 'sans-serif'],
+            mono: ['"SF Mono"', 'Menlo', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #E7E7E7;
+      color: #000000;
+      font-family: 'DM Sans', -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* 1600 Display Headings */
+    .hero-heading {
+      font-family: 'Plus Jakarta Sans', 'DM Sans', sans-serif;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 0.92;
+    }
+
+    /* Deal Clipped Overlay */
+    .deal-clipped-ring {
+      border: 3px solid #1A1A1A !important;
+      background-color: rgba(0, 0, 0, 0.08) !important;
+    }
+    .deal-clipped-badge {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      background: #1A1A1A;
+      color: white;
+      font-size: 10px;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+      z-index: 10;
+    }
+
+        /* Hide scrollbars for clean touch swipe */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Mobile bottom navigation spacing */
+    @media (max-width: 768px) {
+      body {
+        padding-bottom: 5.5rem;
+      }
+    }
+
+    /* Touch targets and smooth transitions */
+    button, a, input, select, textarea {
+      touch-action: manipulation;
+    }
+
+    /* Custom subtle scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #E7E7E7;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #A9A9A9;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #71717A;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-[#1A1A1A] selection:text-white">
+
+  <!-- 1600 FLOATING CAPSULE HEADER -->
+  <header class="w-full px-4 pt-4 sm:pt-6 sticky top-0 z-40">
+    <nav class="max-w-5xl mx-auto px-5 py-3 bg-white/95 backdrop-blur-md rounded-full border border-[#D4D4D8] shadow-sm flex items-center justify-between transition-all">
+      <!-- Left: Logo -->
+      <a href="#" class="flex items-center space-x-2.5">
+        <span class="w-8 h-8 rounded-full bg-[#1A1A1A] text-white flex items-center justify-center text-xs shadow-xs">
+          <i class="fa-solid fa-cart-shopping"></i>
+        </span>
+        <span class="text-base font-extrabold tracking-tight text-[#000000]">
+          SmartCart
+        </span>
+      </a>
+
+      <!-- Middle: Clean Navigation -->
+      <div class="hidden md:flex items-center space-x-6 text-xs font-semibold text-[#525252]">
+        <button onclick="switchMainView('optimizer')" class="hover:text-black transition">Optimizer</button>
+        <button onclick="switchMainView('flyers')" class="hover:text-black transition">Weekly Flyers</button>
+        <button onclick="toggleNearbyStoresModal()" class="hover:text-black transition">Stores (22)</button>
+        <span class="text-[#A9A9A9]">|</span>
+        <div class="flex items-center space-x-1.5 text-black">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="font-medium text-[11px]" id="headerLocationLabel">T5J 1N2 (Downtown)</span>
+        </div>
+        <div class="flex items-center space-x-1.5 bg-[#E7E7E7] px-2.5 py-1 rounded-full text-[11px] font-semibold text-[#1A1A1A]">
+          <i class="fa-solid fa-gas-pump text-amber-600 text-[10px]"></i>
+          <span>Gas:</span>
+          <span id="liveGasBadge" class="font-bold">.53/L</span>
+        </div>
+      </div>
+
+      <!-- Right: Action Button & Contact Dot -->
+      <div class="flex items-center space-x-3">
+        <!-- Postal input pill -->
+        <div class="flex items-center bg-[#E7E7E7] px-2.5 sm:px-3 py-1 rounded-full text-xs font-medium">
+          <input type="text" id="postalCodeInput" placeholder="T5J 1N2" value="T5J 1N2" class="w-16 uppercase bg-transparent text-[#000000] focus:outline-none text-[11px] font-bold">
+          <button onclick="updatePostalCode()" class="text-[10px] uppercase font-bold text-[#525252] hover:text-black ml-1">SET</button>
+        </div>
+
+        <a href="#mediaStage" class="bg-[#1A1A1A] hover:bg-black text-white text-xs font-bold px-4 py-2 rounded-full shadow-sm transition flex items-center gap-1.5">
+          <span>Optimize</span>
+          <i class="fa-solid fa-arrow-down text-[10px]"></i>
+        </a>
+
+
+      </div>
+    </nav>
+  </header>
+
+  <!-- 1600 CENTERED HERO STACK -->
+  <section class="max-w-4xl mx-auto text-center pt-12 pb-10 px-4">
+    <!-- Big Headline -->
+    <h1 class="hero-heading text-5xl sm:text-6xl md:text-7xl text-[#000000] mb-6">
+      Smarter grocery runs.<br>
+      Guaranteed lowest bill.
+    </h1>
+
+    <!-- Short Supporting Sentence -->
+    <p class="text-[#525252] text-base sm:text-lg max-w-xl mx-auto leading-relaxed mb-8 font-normal">
+      Real-time flyer price optimization across Edmonton’s top 6 supermarket chains. Intelligent multi-stop combinatorial routing saving up to 42% every week.
+    </p>
+
+    <!-- Three Compact Chips -->
+    <div class="flex flex-wrap items-center justify-center gap-2.5 mb-8">
+      <span class="bg-white/90 border border-[#A9A9A9]/60 text-[#1A1A1A] px-4 py-1.5 rounded-full text-xs font-medium shadow-xs">
+        Edmonton Metro · 22 Stores
+      </span>
+      <span class="bg-[#1A1A1A] text-white px-4 py-1.5 rounded-full text-xs font-semibold shadow-sm">
+        132 Verified Deals This Week
+      </span>
+      <span class="bg-white/90 border border-[#A9A9A9]/60 text-[#1A1A1A] px-4 py-1.5 rounded-full text-xs font-medium shadow-xs">
+        Combinatorial Split Solver
+      </span>
+    </div>
+
+    <!-- Filled Dark Primary Action Button -->
+    <div>
+      <a href="#mediaStage" class="inline-flex items-center gap-3 bg-[#1A1A1A] hover:bg-black text-white px-8 py-3.5 rounded-full font-bold text-sm shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]">
+        <span>Launch Optimization Workbench</span>
+        <span class="w-6 h-6 rounded-full bg-[#E7E7E7] text-[#1A1A1A] flex items-center justify-center text-xs">
+          <i class="fa-solid fa-arrow-down"></i>
+        </span>
+      </a>
+    </div>
+  </section>
+
+  <!-- 1600 TRUST ROW -->
+  <section class="max-w-4xl mx-auto text-center px-4 mb-12">
+    <div class="text-[11px] font-medium tracking-widest text-[#525252] uppercase mb-4">
+      PRICE TRACKING & FLYER COUPLING ACROSS EDMONTON GROCERS
+    </div>
+    <div class="flex flex-wrap items-center justify-center gap-6 sm:gap-10 opacity-70">
+      <span class="text-xs font-extrabold tracking-wider text-[#525252]">NO FRILLS</span>
+      <span class="text-xs font-extrabold tracking-wider text-[#525252]">WALMART</span>
+      <span class="text-xs font-extrabold tracking-wider text-[#525252]">SUPERSTORE</span>
+      <span class="text-xs font-extrabold tracking-wider text-[#525252]">SAFEWAY</span>
+      <span class="text-xs font-extrabold tracking-wider text-[#525252]">SAVE-ON-FOODS</span>
+      <span class="text-xs font-extrabold tracking-wider text-[#525252]">COSTCO WHOLESALE</span>
+    </div>
+  </section>
+
+  <!-- 1600 PALE MEDIA STAGE -->
+  <section id="mediaStage" class="max-w-7xl mx-auto px-4 sm:px-6 mb-24">
+    <div class="bg-white rounded-[2.5rem] border border-[#D4D4D8] shadow-xl p-6 sm:p-10 relative">
+      
+      <!-- Quiet Top Utility Pill -->
+      <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-8">
+        <span class="px-4 py-1.5 rounded-full bg-[#E7E7E7] text-[#1A1A1A] text-xs font-bold tracking-wide uppercase flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          LIVE OPTIMIZATION WORKBENCH · YEG FEED V1.4
+        </span>
+
+        <!-- View Switcher Pills -->
+        <div class="flex items-center bg-[#E7E7E7] p-1 rounded-full">
+          <button id="viewOptimizerBtn" onclick="switchMainView('optimizer')" class="px-4 py-1.5 text-xs font-bold rounded-full bg-[#1A1A1A] text-white shadow-sm flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-calculator text-[10px]"></i> <span>Optimizer</span>
+          </button>
+          <button id="viewFlyersBtn" onclick="switchMainView('flyers')" class="px-4 py-1.5 text-xs font-semibold rounded-full text-[#525252] hover:text-black flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-book-open text-[10px]"></i> <span>Weekly Flyers</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 1600 STUDIO METRICS STRIP (Top 3 Plan Cards) -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <!-- Plan 1 Card -->
+        <div onclick="selectPlan('maximum_saver')" id="cardMaxSaver" class="cursor-pointer bg-[#F7F7F8] p-5 rounded-2xl border-2 border-[#1A1A1A] relative transition shadow-sm hover:shadow-md">
+          <div class="flex items-center justify-between">
+            <span class="text-xs uppercase font-extrabold tracking-wider text-[#1A1A1A]">Plan 01 // Maximum Saver</span>
+            <span class="text-[10px] bg-[#1A1A1A] text-white px-2 py-0.5 rounded-full font-bold uppercase">Recommended</span>
+          </div>
+          <div class="mt-3 flex items-baseline justify-between">
+            <div class="text-3xl font-extrabold text-[#000000]" id="maxSaverPrice">--</div>
+            <div class="text-xs font-bold text-emerald-600" id="maxSaverSavings">--</div>
+          </div>
+          <div class="text-[11px] font-bold text-[#525252] mt-1.5" id="maxSaverBreakdown">Groceries: -- · Gas: --</div>
+          <div class="text-[10px] text-[#71717A] mt-0.5" id="maxSaverRoute">Round-trip distance: --</div>
+        </div>
+
+        <!-- Plan 2 Card -->
+        <div onclick="selectPlan('best_single_run')" id="cardSingleRun" class="cursor-pointer bg-[#F7F7F8] p-5 rounded-2xl border border-[#D4D4D8] relative transition hover:border-[#1A1A1A]">
+          <div class="flex items-center justify-between">
+            <span class="text-xs uppercase font-extrabold tracking-wider text-[#525252]">Plan 02 // Best Single Run</span>
+            <span class="text-xs font-semibold text-[#525252]" id="singleRunStore">--</span>
+          </div>
+          <div class="mt-3 flex items-baseline justify-between">
+            <div class="text-3xl font-extrabold text-[#000000]" id="singleRunPrice">--</div>
+            <div class="text-xs font-bold text-[#525252]">1 Stop Only</div>
+          </div>
+          <div class="text-[11px] font-bold text-[#525252] mt-1.5" id="singleRunBreakdown">Groceries: -- · Gas: --</div>
+          <div class="text-[10px] text-[#71717A] mt-0.5" id="singleRunRoute">Round-trip distance: --</div>
+        </div>
+
+        <!-- Plan 3 Card -->
+        <div onclick="selectPlan('in_stock_guaranteed')" id="cardInStock" class="cursor-pointer bg-[#F7F7F8] p-5 rounded-2xl border border-[#D4D4D8] relative transition hover:border-[#1A1A1A]">
+          <div class="flex items-center justify-between">
+            <span class="text-xs uppercase font-extrabold tracking-wider text-[#525252]">Plan 03 // In-Stock Verified</span>
+            <span class="text-xs font-bold text-emerald-600"><i class="fa-solid fa-check"></i> 100% Shelf</span>
+          </div>
+          <div class="mt-3 flex items-baseline justify-between">
+            <div class="text-3xl font-extrabold text-[#000000]" id="inStockPrice">--</div>
+            <div class="text-xs font-bold text-[#525252]">Zero OOS Risk</div>
+          </div>
+          <div class="text-[11px] font-bold text-[#525252] mt-1.5" id="inStockBreakdown">Groceries: -- · Gas: --</div>
+          <div class="text-[10px] text-[#71717A] mt-0.5" id="inStockRoute">Round-trip distance: --</div>
+        </div>
+      </div>
+
+      <!-- VIEW 1: BASKET OPTIMIZER & ACTIVE RUN -->
+      <div id="optimizerView" class="space-y-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+          <!-- Left Column: Input Console & Active Basket (5 cols) -->
+          <div class="lg:col-span-5 space-y-6">
+            
+            <!-- Input Console -->
+            <div class="bg-[#F7F7F8] rounded-2xl border border-[#D4D4D8] overflow-hidden">
+              <div class="flex border-b border-[#D4D4D8] bg-[#EAEAEA] text-xs font-bold">
+                <button id="tabRecipeBtn" onclick="switchInputTab('recipe')" class="flex-1 py-3 px-4 text-black bg-[#F7F7F8] border-r border-[#D4D4D8] border-b-2 border-black flex items-center justify-center gap-1.5">
+                  <i class="fa-solid fa-wand-magic-sparkles text-[11px]"></i> Recipe Console
+                </button>
+                <button id="tabSearchBtn" onclick="switchInputTab('search')" class="flex-1 py-3 px-4 text-[#525252] hover:text-black flex items-center justify-center gap-1.5">
+                  <i class="fa-solid fa-magnifying-glass text-[11px]"></i> Search Item
+                </button>
+              </div>
+
+              <!-- Recipe Tab -->
+              <div id="recipeTab" class="p-4 space-y-3">
+                <textarea id="recipeInput" rows="3" class="w-full text-xs p-3 rounded-xl bg-white border border-[#D4D4D8] text-black focus:outline-none focus:border-black placeholder-[#A9A9A9]" placeholder="Paste ingredients (e.g. 1 kg chicken breast, 4L milk, 1 yellow onion, 500g spaghetti)..."></textarea>
+                
+                <div class="flex justify-between items-center gap-2">
+                  <div class="flex gap-1.5 flex-wrap">
+                    <button onclick="loadSample('butterChicken')" class="text-[11px] font-medium px-2.5 py-1 rounded-full bg-white border border-[#D4D4D8] hover:border-black text-[#525252] hover:text-black transition">Butter Chicken</button>
+                    <button onclick="loadSample('weeklyStaples')" class="text-[11px] font-medium px-2.5 py-1 rounded-full bg-white border border-[#D4D4D8] hover:border-black text-[#525252] hover:text-black transition">Staples</button>
+                    <button onclick="loadSample('pastaNight')" class="text-[11px] font-medium px-2.5 py-1 rounded-full bg-white border border-[#D4D4D8] hover:border-black text-[#525252] hover:text-black transition">Pasta</button>
+                  </div>
+                  <button onclick="parseRecipe()" class="bg-[#1A1A1A] hover:bg-black text-white text-xs px-4 py-2 rounded-full flex items-center gap-1.5 shadow-sm font-bold transition">
+                    <i class="fa-solid fa-arrow-down text-[10px]"></i> Add
+                  </button>
+                </div>
+              </div>
+
+              <!-- Search Tab -->
+              <div id="searchTab" class="p-4 space-y-3 hidden">
+                <div class="space-y-2">
+                  <div class="flex gap-2">
+                    <div class="relative flex-1">
+                      <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-[#A9A9A9] text-xs"></i>
+                      <input type="text" id="omniInput" placeholder="Type grocery item (milk, chicken, eggs, banana)..." oninput="debounceSearchOmnibar()" onkeydown="if(event.key==='Enter') searchOmnibar()" class="w-full pl-9 pr-3 py-2.5 text-xs rounded-xl bg-white border border-[#D4D4D8] text-black focus:outline-none focus:border-black">
+                    </div>
+                    <button onclick="searchOmnibar()" class="bg-[#1A1A1A] hover:bg-black text-white text-xs px-4 py-2.5 rounded-full font-bold transition shadow-xs">
+                      Search
+                    </button>
+                  </div>
+
+                  <!-- Quick Category Shortcut Pills -->
+                  <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                    <button onclick="setOmniCategory('Produce')" class="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-white border border-[#D4D4D8] hover:border-black text-[#525252] hover:text-black shrink-0 transition">🥦 Produce</button>
+                    <button onclick="setOmniCategory('Meat')" class="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-white border border-[#D4D4D8] hover:border-black text-[#525252] hover:text-black shrink-0 transition">🥩 Meat & Seafood</button>
+                    <button onclick="setOmniCategory('Dairy')" class="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-white border border-[#D4D4D8] hover:border-black text-[#525252] hover:text-black shrink-0 transition">🥛 Dairy & Eggs</button>
+                    <button onclick="setOmniCategory('Bakery')" class="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-white border border-[#D4D4D8] hover:border-black text-[#525252] hover:text-black shrink-0 transition">🍞 Bakery</button>
+                    <button onclick="setOmniCategory('Pantry')" class="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-white border border-[#D4D4D8] hover:border-black text-[#525252] hover:text-black shrink-0 transition">🥫 Pantry</button>
+                  </div>
+                </div>
+
+                <!-- Instant Search / Live Results Container -->
+                <div id="searchResultPreview" class="hidden p-3 bg-white rounded-xl border border-[#D4D4D8] text-xs space-y-2 max-h-[280px] overflow-y-auto"></div>
+              </div>
+            </div>
+
+            <!-- Active Basket Tray -->
+            <div class="bg-[#F7F7F8] rounded-2xl border border-[#D4D4D8] p-5 space-y-4">
+              <div class="flex justify-between items-center border-b border-[#D4D4D8] pb-3">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-bold text-black">Active Shopping Basket</span>
+                  <span id="itemCountBadge" class="text-xs font-bold bg-[#E7E7E7] text-[#1A1A1A] px-2 py-0.5 rounded-full">0 items</span>
+                </div>
+                <button onclick="clearBasket()" class="text-xs font-semibold text-[#525252] hover:text-rose-600 transition">Clear</button>
+              </div>
+
+              <div id="basketItemsList" class="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                <p class="text-xs text-[#525252] text-center py-8">Basket is empty. Add a recipe, search an item, or clip deals from the weekly flyer.</p>
+              </div>
+
+              <!-- Optimization Options -->
+              <div class="flex items-center justify-between text-xs text-[#525252] pt-2 border-t border-[#D4D4D8]">
+                <div class="flex items-center gap-1.5">
+                  <span>Radius:</span>
+                  <select id="radiusSelect" onchange="runOptimization()" class="bg-white border border-[#D4D4D8] rounded-md px-2 py-1 text-xs font-medium text-black focus:outline-none">
+                    <option value="5">5 km</option>
+                    <option value="10">10 km</option>
+                    <option value="15" selected>15 km</option>
+                    <option value="25">25 km</option>
+                  </select>
+                </div>
+                <label class="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" id="excludeCostco" onchange="runOptimization()" class="rounded border-[#A9A9A9] text-black focus:ring-0">
+                  <span>No Costco</span>
+                </label>
+              </div>
+
+              <button id="optimizeBtn" onclick="runOptimization()" class="w-full py-3.5 bg-[#1A1A1A] hover:bg-black text-white text-xs font-bold rounded-full uppercase tracking-wider flex items-center justify-center gap-2 shadow-md transition hover:scale-[1.01]">
+                <i class="fa-solid fa-calculator"></i> Run 3-Plan Optimizer
+              </button>
+            </div>
+
+          </div>
+
+          <!-- Right Column: Active Solution Plan & Route (7 cols) -->
+          <div class="lg:col-span-7 space-y-6">
+            
+            <div class="bg-[#F7F7F8] rounded-2xl border border-[#D4D4D8] p-6 space-y-5">
+              <!-- Plan Header -->
+              <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-[#D4D4D8] pb-4">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span id="activePlanBadge" class="text-xs bg-[#1A1A1A] text-white px-3 py-0.5 rounded-full font-bold uppercase">Plan 1: Maximum Saver</span>
+                    <span id="activePlanStoresCount" class="text-xs text-[#525252] font-medium">-- Store(s)</span>
+                  </div>
+                  <h2 id="activePlanTitle" class="text-xl font-extrabold text-black mt-1">Multi-Store Route</h2>
+                </div>
+                <div class="text-right">
+                  <div class="text-xs font-bold text-[#525252] uppercase">Final Price (Groceries + Gas)</div>
+                  <div class="text-3xl font-extrabold text-black" id="activePlanTotalCost">$0.00</div>
+                  <div class="text-xs font-bold text-emerald-700" id="activePlanBreakdown">Groceries: $0.00 + Gas: $0.00</div>
+                </div>
+              </div>
+
+              <!-- Savings Banner -->
+              <div class="p-3 bg-white rounded-xl border border-[#D4D4D8] flex justify-between items-center text-xs">
+                <span class="text-[#525252] font-medium">Estimated Savings vs. Edmonton Supermarket Average:</span>
+                <span id="savingsBannerAmount" class="text-emerald-700 font-extrabold text-sm">$0.00 (0%)</span>
+              </div>
+
+              <!-- DEDICATED GROCERIES VS. GAS BREAKDOWN CARD -->
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-white rounded-2xl border border-[#D4D4D8] shadow-xs">
+                <div class="space-y-0.5 border-b sm:border-b-0 sm:border-r border-[#EAEAEA] pb-2 sm:pb-0 sm:pr-3">
+                  <div class="text-[10px] uppercase font-extrabold tracking-wider text-[#71717A] flex items-center gap-1.5">
+                    <i class="fa-solid fa-basket-shopping text-emerald-600"></i> Groceries Subtotal
+                  </div>
+                  <div class="text-2xl font-black text-black" id="breakdownGroceries">$0.00</div>
+                  <div class="text-[10px] text-[#71717A]" id="breakdownItemCount">Cart items across selected stores</div>
+                </div>
+
+                <div class="space-y-0.5 border-b sm:border-b-0 sm:border-r border-[#EAEAEA] pb-2 sm:pb-0 sm:px-3">
+                  <div class="text-[10px] uppercase font-extrabold tracking-wider text-[#71717A] flex items-center gap-1.5">
+                    <i class="fa-solid fa-gas-pump text-amber-600"></i> Estimated Gas Cost
+                  </div>
+                  <div class="text-2xl font-black text-black" id="breakdownGas">$0.00</div>
+                  <div class="text-[10px] text-[#71717A]" id="breakdownGasCalc">@ Edmonton avg $1.42/L (9.5 L/100km)</div>
+                </div>
+
+                <div class="space-y-0.5 sm:pl-3">
+                  <div class="text-[10px] uppercase font-extrabold tracking-wider text-[#71717A] flex items-center gap-1.5">
+                    <i class="fa-solid fa-receipt text-blue-600"></i> Final All-In Bill
+                  </div>
+                  <div class="text-2xl font-black text-black" id="breakdownFinalTotal">$0.00</div>
+                  <div class="text-[10px] text-emerald-700 font-bold">Groceries + Gas Included</div>
+                </div>
+              </div>
+
+              <!-- ASSIGNED STORES & ITEM BREAKDOWN -->
+              <div class="space-y-3">
+                <div class="flex justify-between items-center">
+                  <div>
+                    <div class="text-xs uppercase font-extrabold tracking-wider text-[#525252]">Where to Buy & Item Breakdown</div>
+                    <p class="text-[11px] text-[#71717A]">Optimized store allocation for the lowest total bill with gas included</p>
+                  </div>
+                </div>
+
+                <div id="storeStopsContainer" class="space-y-3">
+                  <p class="text-xs text-[#525252] py-2">Add items to basket and run the optimizer.</p>
+                </div>
+              </div>
+
+              <!-- Price Matrix Table -->
+              <div class="border-t border-[#D4D4D8] pt-5 space-y-3">
+                <div class="flex justify-between items-baseline">
+                  <span class="text-xs font-bold text-black">Price Comparison Matrix</span>
+                  <span class="text-[11px] text-[#525252]">Normalized unit rates (/100g, /100ml, /unit)</span>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-xs text-left">
+                    <thead class="bg-[#EAEAEA] text-[#525252] font-bold text-[11px] border-b border-[#D4D4D8]">
+                      <tr>
+                        <th class="py-2.5 px-3">Item</th>
+                        <th class="py-2.5 px-2">Superstore</th>
+                        <th class="py-2.5 px-2">Walmart</th>
+                        <th class="py-2.5 px-2">No Frills</th>
+                        <th class="py-2.5 px-2">Safeway</th>
+                        <th class="py-2.5 px-2">Costco</th>
+                        <th class="py-2.5 px-2">Save-On</th>
+                      </tr>
+                    </thead>
+                    <tbody id="comparisonTableBody" class="divide-y divide-[#D4D4D8] text-[11px]">
+                      <tr>
+                        <td colspan="7" class="text-center py-5 text-[#525252]">No items in basket.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+      <!-- VIEW 2: WEEKLY PHYSICAL CIRCULAR & ITEM GRID -->
+      <div id="flyersView" class="hidden space-y-6">
+        
+        <!-- Controls Bar -->
+        <div class="bg-[#F7F7F8] p-5 rounded-2xl border border-[#D4D4D8] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-lg font-extrabold text-black">Weekly Flyer Station</h2>
+              <span class="text-[11px] font-bold uppercase bg-[#E7E7E7] text-[#1A1A1A] px-2.5 py-0.5 rounded-full">Weekly Flyers</span>
+            </div>
+            <p class="text-xs text-[#525252] mt-1">
+              Browse physical publication pages or itemized grids. Click any deal on the page to <strong class="text-black">Circle & Clip</strong> straight into your basket.
+            </p>
+          </div>
+
+          <!-- Mode Toggle -->
+          <div class="flex items-center bg-[#E7E7E7] p-1 rounded-full">
+            <button id="btnCircularMode" onclick="switchFlyerMode('circular')" class="px-4 py-1.5 rounded-full text-xs font-bold bg-[#1A1A1A] text-white shadow-sm flex items-center gap-1.5 transition">
+              <i class="fa-solid fa-book-open text-[10px]"></i> Flyer View
+            </button>
+            
+            <button onclick="openUploadFlyerModal()" class="px-3.5 py-1.5 bg-white border border-[#D4D4D8] hover:border-black rounded-full text-xs font-bold text-black flex items-center gap-1.5 transition shadow-xs">
+              <i class="fa-solid fa-cloud-arrow-up text-xs"></i> <span>Upload Flyer</span>
+            </button>
+
+            <button id="btnGridMode" onclick="switchFlyerMode('grid')" class="px-4 py-1.5 rounded-full text-xs font-semibold text-[#525252] hover:text-black flex items-center gap-1.5 transition">
+              <i class="fa-solid fa-table-cells text-[10px]"></i> Deals Grid
+            </button>
+          </div>
+        </div>
+
+        <!-- Chain Tabs -->
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <span class="text-xs font-bold text-[#525252] mr-1 uppercase">Chain:</span>
+          <button onclick="selectCircularBanner('No Frills')" id="btnBanner_NoFrills" class="px-3.5 py-1.5 bg-yellow-400 text-yellow-950 font-bold rounded-full text-xs transition shadow-xs">No Frills</button>
+          <button onclick="selectCircularBanner('Walmart')" id="btnBanner_Walmart" class="px-3.5 py-1.5 bg-white text-[#525252] hover:text-black rounded-full text-xs border border-[#D4D4D8] transition">Walmart</button>
+          <button onclick="selectCircularBanner('Superstore')" id="btnBanner_Superstore" class="px-3.5 py-1.5 bg-white text-[#525252] hover:text-black rounded-full text-xs border border-[#D4D4D8] transition">Superstore</button>
+          <button onclick="selectCircularBanner('Safeway')" id="btnBanner_Safeway" class="px-3.5 py-1.5 bg-white text-[#525252] hover:text-black rounded-full text-xs border border-[#D4D4D8] transition">Safeway</button>
+          <button onclick="selectCircularBanner('Save-On-Foods')" id="btnBanner_SaveOn" class="px-3.5 py-1.5 bg-white text-[#525252] hover:text-black rounded-full text-xs border border-[#D4D4D8] transition">Save-On</button>
+          <button onclick="selectCircularBanner('Costco')" id="btnBanner_Costco" class="px-3.5 py-1.5 bg-white text-[#525252] hover:text-black rounded-full text-xs border border-[#D4D4D8] transition">Costco</button>
+          <button onclick="selectCircularBanner('all')" id="btnBanner_all" class="px-3.5 py-1.5 bg-white text-[#525252] hover:text-black rounded-full text-xs border border-[#D4D4D8] transition">All Stores</button>
+        </div>
+
+        <!-- WEEKLY CIRCULAR CANVAS VIEWER -->
+        <div id="circularContainer" class="space-y-4">
+          <!-- Toolbar -->
+          <div class="bg-[#F7F7F8] p-3 rounded-2xl border border-[#D4D4D8] flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div class="flex items-center gap-2">
+              <button onclick="navigateCircularPage(-1)" class="px-3 py-1.5 bg-white hover:bg-[#EAEAEA] text-black rounded-full text-xs font-bold border border-[#D4D4D8] transition">
+                ← Prev
+              </button>
+              <div class="px-4 py-1.5 bg-white border border-[#D4D4D8] rounded-full text-xs font-bold text-black text-center min-w-[220px]" id="circularCurrentPageLabel">
+                Page 1 of 6: Front Page Deals
+              </div>
+              <button onclick="navigateCircularPage(1)" class="px-3 py-1.5 bg-white hover:bg-[#EAEAEA] text-black rounded-full text-xs font-bold border border-[#D4D4D8] transition">
+                Next →
+              </button>
+            </div>
+
+            <div class="flex items-center gap-2 text-xs font-bold">
+              <span class="text-emerald-700 bg-white border border-[#D4D4D8] px-3 py-1 rounded-full"><i class="fa-solid fa-pen-nib"></i> Click to Clip</span>
+              <span id="clippedCountBadge" class="text-black bg-white border border-[#D4D4D8] px-3 py-1 rounded-full">0 Clipped</span>
+            </div>
+          </div>
+
+          <!-- Physical Publication Page Container -->
+          <div class="bg-[#F7F7F8] p-4 sm:p-8 rounded-3xl border border-[#D4D4D8] flex flex-col items-center">
+            <div id="physicalFlyerCanvas" class="w-full max-w-3xl circular-page rounded-2xl border border-[#D4D4D8] overflow-hidden shadow-xl bg-white"></div>
+
+            <!-- Page Jump Strip -->
+            <div class="mt-5 flex gap-2 overflow-x-auto py-1" id="pageThumbnailsStrip"></div>
+          </div>
+        </div>
+
+        <!-- ITEM GRID VIEW -->
+        <div id="itemGridContainer" class="hidden space-y-5">
+          <div class="bg-[#F7F7F8] p-4 rounded-2xl border border-[#D4D4D8] flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div class="relative w-full sm:w-72">
+              <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-[#A9A9A9] text-xs"></i>
+              <input type="text" id="flyerSearchInput" oninput="debounceSearchFlyers()" placeholder="Filter deals (beef, milk, butter)..." class="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-white border border-[#D4D4D8] text-black focus:outline-none focus:border-black">
+            </div>
+
+            <!-- Category Filter Pills -->
+            <div class="flex flex-wrap gap-1.5 text-xs">
+              <button onclick="filterFlyerCategory('all')" id="btnCat_all" class="px-3 py-1 rounded-full bg-[#1A1A1A] text-white font-bold text-xs">All</button>
+              <button onclick="filterFlyerCategory('Meat & Seafood')" id="btnCat_Meat" class="px-3 py-1 rounded-full bg-white text-[#525252] hover:text-black border border-[#D4D4D8] text-xs">Meat</button>
+              <button onclick="filterFlyerCategory('Produce')" id="btnCat_Produce" class="px-3 py-1 rounded-full bg-white text-[#525252] hover:text-black border border-[#D4D4D8] text-xs">Produce</button>
+              <button onclick="filterFlyerCategory('Dairy & Eggs')" id="btnCat_Dairy" class="px-3 py-1 rounded-full bg-white text-[#525252] hover:text-black border border-[#D4D4D8] text-xs">Dairy</button>
+              <button onclick="filterFlyerCategory('Pantry & Groceries')" id="btnCat_Pantry" class="px-3 py-1 rounded-full bg-white text-[#525252] hover:text-black border border-[#D4D4D8] text-xs">Pantry</button>
+              <button onclick="filterFlyerCategory('Bakery & Deli')" id="btnCat_Bakery" class="px-3 py-1 rounded-full bg-white text-[#525252] hover:text-black border border-[#D4D4D8] text-xs">Bakery</button>
+            </div>
+          </div>
+
+          <div id="flyerDealsGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 1600 DARK FOOTER (City clocks, contact block, dense legal rail) -->
+  <footer class="bg-[#000000] text-[#A9A9A9] pt-20 pb-12 px-6 sm:px-12 border-t border-black mt-auto">
+    <div class="max-w-7xl mx-auto space-y-16">
+      
+      <!-- Upper Band: City Clocks & Contact -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-8 border-b border-[#27272A] pb-12">
+        <!-- Brand Block -->
+        <div class="space-y-3">
+          <div class="flex items-center space-x-2.5">
+            <span class="w-7 h-7 rounded-full bg-white text-black flex items-center justify-center text-xs">
+              <i class="fa-solid fa-cart-shopping"></i>
+            </span>
+            <span class="text-white text-lg font-extrabold tracking-tight">SmartCart</span>
+          </div>
+          <p class="text-xs text-[#71717A] max-w-xs leading-relaxed font-meta">
+            Intelligent algorithmic grocery routing and weekly flyer optimization for Edmonton consumers.
+          </p>
+        </div>
+
+        <!-- Local Coverage: Edmonton Only -->
+        <div class="space-y-1">
+          <div class="text-[11px] uppercase tracking-wider font-semibold text-[#71717A]">Local Coverage</div>
+          <div class="text-2xl font-bold text-white tracking-tight">Edmonton, AB</div>
+          <div class="text-xs text-[#71717A] font-meta">22 Indexed Supermarkets · YEG Metro</div>
+        </div>
+
+        <!-- Gas Pricing Benchmark -->
+        <div class="space-y-1">
+          <div class="text-[11px] uppercase tracking-wider font-semibold text-[#71717A]">Fuel Benchmark</div>
+          <div class="text-lg font-bold text-white">$1.42 / Litre</div>
+          <div class="text-xs text-[#71717A] font-meta">Edmonton regular gas · 9.5 L/100km model</div>
+        </div>
+
+        <!-- Project Status Block -->
+        <div class="space-y-1">
+          <div class="text-[11px] uppercase tracking-wider font-semibold text-[#71717A]">Project Status</div>
+          <div class="text-sm font-medium text-white">Edmonton Grocery Routing Project</div>
+          <div class="text-xs text-[#71717A] font-meta">Independent local consumer research tool</div>
+        </div>
+      </div>
+
+      <!-- Lower Band: Dense Navigation, Coverage & Legal Rail -->
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 text-xs text-[#71717A] font-meta">
+        <div class="flex flex-wrap gap-6">
+          <a href="#" onclick="switchMainView('optimizer')" class="hover:text-white transition">Optimizer</a>
+          <a href="#" onclick="switchMainView('flyers')" class="hover:text-white transition">Flyer Catalog</a>
+          <a href="#" onclick="toggleNearbyStoresModal()" class="hover:text-white transition">Edmonton Supermarkets (22)</a>
+          <a href="https://maps.google.com" target="_blank" class="hover:text-white transition">Transit & Distance Engine</a>
+        </div>
+
+        <div class="text-[11px]">
+          &copy; 2026 SmartCart Intelligence. All rights reserved.
+        </div>
+      </div>
+
+    </div>
+  </footer>
+
+  
+
+  <!-- 22 STORES DIRECTORY MODAL -->
+  <div id="nearbyStoresModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white text-black w-full max-w-2xl rounded-3xl border border-[#D4D4D8] shadow-2xl overflow-hidden">
+      <div class="p-6 border-b border-[#D4D4D8] flex justify-between items-center">
+        <div>
+          <h3 class="text-lg font-extrabold">Edmonton Supermarkets Directory</h3>
+          <p class="text-xs text-[#525252] mt-0.5">22 Supermarket locations indexed within Edmonton Municipal limits</p>
+        </div>
+        <button onclick="toggleNearbyStoresModal()" class="w-8 h-8 rounded-full bg-[#E7E7E7] hover:bg-[#D4D4D8] flex items-center justify-center text-[#525252] hover:text-black">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Store Filter & Search Controls -->
+      <div class="p-4 bg-[#F7F7F8] border-b border-[#D4D4D8] space-y-2.5">
+        <div class="relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-[#A9A9A9] text-xs"></i>
+          <input type="text" id="storeModalSearchInput" oninput="filterStoreModalList()" placeholder="Filter 22 stores by name, street, or banner (e.g. South Common, Kingsway, Clareview)..." class="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-white border border-[#D4D4D8] text-black focus:outline-none focus:border-black">
+        </div>
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          <button onclick="filterStoreModalQuadrant('all')" id="btnQuad_all" class="text-[11px] font-bold px-3 py-1 rounded-full bg-[#1A1A1A] text-white shrink-0">All (22)</button>
+          <button onclick="filterStoreModalQuadrant('Central')" id="btnQuad_Central" class="text-[11px] font-semibold px-3 py-1 rounded-full bg-white text-[#525252] hover:text-black border border-[#D4D4D8] shrink-0">Central (4)</button>
+          <button onclick="filterStoreModalQuadrant('South')" id="btnQuad_South" class="text-[11px] font-semibold px-3 py-1 rounded-full bg-white text-[#525252] hover:text-black border border-[#D4D4D8] shrink-0">South (5)</button>
+          <button onclick="filterStoreModalQuadrant('West')" id="btnQuad_West" class="text-[11px] font-semibold px-3 py-1 rounded-full bg-white text-[#525252] hover:text-black border border-[#D4D4D8] shrink-0">West (5)</button>
+          <button onclick="filterStoreModalQuadrant('East')" id="btnQuad_East" class="text-[11px] font-semibold px-3 py-1 rounded-full bg-white text-[#525252] hover:text-black border border-[#D4D4D8] shrink-0">East (4)</button>
+          <button onclick="filterStoreModalQuadrant('North')" id="btnQuad_North" class="text-[11px] font-semibold px-3 py-1 rounded-full bg-white text-[#525252] hover:text-black border border-[#D4D4D8] shrink-0">North (2)</button>
+          <button onclick="filterStoreModalQuadrant('Region')" id="btnQuad_Region" class="text-[11px] font-semibold px-3 py-1 rounded-full bg-white text-[#525252] hover:text-black border border-[#D4D4D8] shrink-0">Region (2)</button>
+        </div>
+      </div>
+
+      <div class="p-6 max-h-[50vh] overflow-y-auto space-y-3" id="nearbyStoresModalList">
+        <div class="text-center py-6 text-xs text-[#525252]">Loading store database...</div>
+      </div>
+
+      <div class="p-4 bg-[#F7F7F8] border-t border-[#D4D4D8] text-right">
+        <button onclick="toggleNearbyStoresModal()" class="px-5 py-2 bg-[#1A1A1A] hover:bg-black text-white text-xs font-bold rounded-full">
+          Close Directory
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT APPLICATION LOGIC -->
+  <script>
+    let currentBasket = [];
+    let optimizationResults = null;
+    let selectedPlanKey = 'maximum_saver';
+    let userLocation = {
+      postal_code: 'T5J 1N2',
+      label: 'T5J 1N2 (Downtown Edmonton)',
+      lat: 53.5444,
+      lon: -113.4909
+    };
+    let allDeals = [];
+
+    const PRODUCT_IMAGES = {
+      'banana': 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=500&auto=format&fit=crop&q=80',
+      'apple': 'https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=500&auto=format&fit=crop&q=80',
+      'strawberr': 'https://images.unsplash.com/photo-1464965911861-746a04b4bca6?w=500&auto=format&fit=crop&q=80',
+      'avocado': 'https://images.unsplash.com/photo-1523049673857-eb18f1d7b578?w=500&auto=format&fit=crop&q=80',
+      'onion': 'https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=500&auto=format&fit=crop&q=80',
+      'potato': 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=500&auto=format&fit=crop&q=80',
+      'grape': 'https://images.unsplash.com/photo-1537640538966-79f369143f8f?w=500&auto=format&fit=crop&q=80',
+      'spinach': 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=500&auto=format&fit=crop&q=80',
+      'tomato': 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&auto=format&fit=crop&q=80',
+      'pineapple': 'https://images.unsplash.com/photo-1550258987-190a2d41a8ba?w=500&auto=format&fit=crop&q=80',
+      'pepper': 'https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?w=500&auto=format&fit=crop&q=80',
+      'lettuce': 'https://images.unsplash.com/photo-1556801712-76c8eb07bbc9?w=500&auto=format&fit=crop&q=80',
+      'mushroom': 'https://images.unsplash.com/photo-1504544750208-dc0358e63f7f?w=500&auto=format&fit=crop&q=80',
+      'garlic': 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=500&auto=format&fit=crop&q=80',
+      'cucumber': 'https://images.unsplash.com/photo-1604977042946-1eecc30f269e?w=500&auto=format&fit=crop&q=80',
+      'chicken': 'https://images.unsplash.com/photo-1604503468506-a8da13d82791?w=500&auto=format&fit=crop&q=80',
+      'beef': 'https://images.unsplash.com/photo-1588168333986-5078d3ae3976?w=500&auto=format&fit=crop&q=80',
+      'salmon': 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=500&auto=format&fit=crop&q=80',
+      'bacon': 'https://images.unsplash.com/photo-1528607929212-2636ec44253e?w=500&auto=format&fit=crop&q=80',
+      'pork': 'https://images.unsplash.com/photo-1432139555190-58524dae6a55?w=500&auto=format&fit=crop&q=80',
+      'wiener': 'https://images.unsplash.com/photo-1619740455993-9e612b1af08a?w=500&auto=format&fit=crop&q=80',
+      'sausage': 'https://images.unsplash.com/photo-1585325701165-351af916e581?w=500&auto=format&fit=crop&q=80',
+      'ribs': 'https://images.unsplash.com/photo-1544025162-d76694265947?w=500&auto=format&fit=crop&q=80',
+      'roast': 'https://images.unsplash.com/photo-1558030006-450675393462?w=500&auto=format&fit=crop&q=80',
+      'milk': 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=500&auto=format&fit=crop&q=80',
+      'egg': 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?w=500&auto=format&fit=crop&q=80',
+      'butter': 'https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?w=500&auto=format&fit=crop&q=80',
+      'cheese': 'https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?w=500&auto=format&fit=crop&q=80',
+      'cream': 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=500&auto=format&fit=crop&q=80',
+      'yogurt': 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=500&auto=format&fit=crop&q=80',
+      'bread': 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=500&auto=format&fit=crop&q=80',
+      'cookie': 'https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=500&auto=format&fit=crop&q=80',
+      'spaghetti': 'https://images.unsplash.com/photo-1621996346565-e3d5d6281691?w=500&auto=format&fit=crop&q=80',
+      'pasta': 'https://images.unsplash.com/photo-1551462147-37885acc36f1?w=500&auto=format&fit=crop&q=80',
+      'rice': 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=500&auto=format&fit=crop&q=80',
+      'sauce': 'https://images.unsplash.com/photo-1572449043416-55f4685c9bb7?w=500&auto=format&fit=crop&q=80',
+      'olive oil': 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=500&auto=format&fit=crop&q=80',
+      'cereal': 'https://images.unsplash.com/photo-1521483451569-e33803c0330c?w=500&auto=format&fit=crop&q=80',
+      'coffee': 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=500&auto=format&fit=crop&q=80',
+      'pizza': 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500&auto=format&fit=crop&q=80',
+      'fries': 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=500&auto=format&fit=crop&q=80',
+      'ice cream': 'https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?w=500&auto=format&fit=crop&q=80',
+      'chips': 'https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=500&auto=format&fit=crop&q=80'
+    };
+
+    function getProductPhotoUrl(title, category) {
+      const t = (title || '').toLowerCase();
+      for (const [k, url] of Object.entries(PRODUCT_IMAGES)) {
+        if (t.includes(k)) return url;
+      }
+      const c = (category || '').toLowerCase();
+      if (c.includes('meat') || c.includes('seafood')) return PRODUCT_IMAGES['chicken'];
+      if (c.includes('produce')) return PRODUCT_IMAGES['apple'];
+      if (c.includes('dairy') || c.includes('egg')) return PRODUCT_IMAGES['milk'];
+      if (c.includes('bakery')) return PRODUCT_IMAGES['bread'];
+      if (c.includes('pantry')) return PRODUCT_IMAGES['pasta'];
+      return PRODUCT_IMAGES['chips'];
+    }
+
+    let customFlyerPages = [];
+
+    async function loadCustomFlyerPages() {
+      try {
+        const res = await fetch('/api/flyers/custom-pages');
+        const data = await res.json();
+        customFlyerPages = data.custom_pages || [];
+      } catch (err) {
+        console.error("Error loading custom flyer pages:", err);
+      }
+    }
+
+    let currentBannerFilter = 'No Frills';
+    let currentCircularPage = 1;
+    let currentFlyerMode = 'circular';
+    let currentCategoryFilter = 'all';
+    let currentSearchQuery = '';
+    let searchDebounceTimeout = null;
+    let clippedItemIds = new Set();
+
+    const PAGE_TITLES = {
+      1: 'Front Page Doorcrashers',
+      2: 'Fresh Meats & Seafood',
+      3: 'Produce Market',
+      4: 'Dairy, Cheese & Eggs',
+      5: 'Pantry & Groceries',
+      6: 'Bakery & Frozen'
+    };
+
+    const SAMPLES = {
+      butterChicken: [
+        { name: "chicken thighs", quantity: 1, unit: "kg" },
+        { name: "heavy cream", quantity: 500, unit: "ml" },
+        { name: "crushed tomatoes", quantity: 796, unit: "ml" },
+        { name: "garam masala", quantity: 100, unit: "g" },
+        { name: "basmati rice", quantity: 4.54, unit: "kg" },
+        { name: "yellow onion", quantity: 1.36, unit: "kg" }
+      ],
+      weeklyStaples: [
+        { name: "2% milk", quantity: 4, unit: "L" },
+        { name: "eggs", quantity: 12, unit: "unit" },
+        { name: "chicken breast", quantity: 1, unit: "kg" },
+        { name: "bananas", quantity: 1, unit: "kg" },
+        { name: "white bread", quantity: 675, unit: "g" },
+        { name: "salted butter", quantity: 454, unit: "g" }
+      ],
+      pastaNight: [
+        { name: "ground beef", quantity: 1, unit: "kg" },
+        { name: "dry spaghetti", quantity: 900, unit: "g" },
+        { name: "pasta sauce", quantity: 650, unit: "ml" },
+        { name: "cheddar cheese block", quantity: 400, unit: "g" },
+        { name: "garlic", quantity: 3, unit: "unit" }
+      ]
+    };
+
+    
+    function formatDealPrice(p) {
+      if (typeof p === 'number') return '$' + p.toFixed(2);
+      const n = parseFloat(p);
+      return isNaN(n) ? '$0.00' : '$' + n.toFixed(2);
+    }
+
+    function formatStdPrice(stdPrice, stdType) {
+      if (!stdPrice && stdPrice !== 0) return '';
+      if (typeof stdPrice === 'number') {
+        return '$' + stdPrice.toFixed(2) + formatUnitLabel(stdType);
+      }
+      if (typeof stdPrice === 'string') {
+        return stdPrice.trim();
+      }
+      return String(stdPrice);
+    }
+
+    function formatUnitLabel(stdType) {
+      if (!stdType) return '';
+      if (stdType === 'weight_100g') return '/ 100g';
+      if (stdType === 'volume_100ml') return '/ 100ml';
+      if (stdType === 'unit') return '/ item';
+      return `/${stdType}`;
+    }
+
+    function switchMainView(view) {
+      if (view === 'optimizer') {
+        document.getElementById('optimizerView').classList.remove('hidden');
+        document.getElementById('flyersView').classList.add('hidden');
+        document.getElementById('viewOptimizerBtn').className = "px-4 py-1.5 text-xs font-bold rounded-full bg-[#1A1A1A] text-white shadow-sm flex items-center gap-1.5 transition";
+        document.getElementById('viewFlyersBtn').className = "px-4 py-1.5 text-xs font-semibold rounded-full text-[#525252] hover:text-black flex items-center gap-1.5 transition";
+      } else {
+        document.getElementById('optimizerView').classList.add('hidden');
+        document.getElementById('flyersView').classList.remove('hidden');
+        document.getElementById('viewFlyersBtn').className = "px-4 py-1.5 text-xs font-bold rounded-full bg-[#1A1A1A] text-white shadow-sm flex items-center gap-1.5 transition";
+        document.getElementById('viewOptimizerBtn').className = "px-4 py-1.5 text-xs font-semibold rounded-full text-[#525252] hover:text-black flex items-center gap-1.5 transition";
+        loadAllFlyerDeals();
+      }
+    }
+
+    function switchFlyerMode(mode) {
+      currentFlyerMode = mode;
+      if (mode === 'circular') {
+        document.getElementById('circularContainer').classList.remove('hidden');
+        document.getElementById('itemGridContainer').classList.add('hidden');
+        document.getElementById('btnCircularMode').className = "px-4 py-1.5 rounded-full text-xs font-bold bg-[#1A1A1A] text-white shadow-sm flex items-center gap-1.5 transition";
+        document.getElementById('btnGridMode').className = "px-4 py-1.5 rounded-full text-xs font-semibold text-[#525252] hover:text-black flex items-center gap-1.5 transition";
+        renderPhysicalCircularPage();
+      } else {
+        document.getElementById('circularContainer').classList.add('hidden');
+        document.getElementById('itemGridContainer').classList.remove('hidden');
+        document.getElementById('btnGridMode').className = "px-4 py-1.5 rounded-full text-xs font-bold bg-[#1A1A1A] text-white shadow-sm flex items-center gap-1.5 transition";
+        document.getElementById('btnCircularMode').className = "px-4 py-1.5 rounded-full text-xs font-semibold text-[#525252] hover:text-black flex items-center gap-1.5 transition";
+        renderFlyerDealsGrid();
+      }
+    }
+
+    async function loadAllFlyerDeals() {
+      try {
+        const res = await fetch('/api/flyers/deals');
+        const data = await res.json();
+        allDeals = data.deals || [];
+        renderPhysicalCircularPage();
+        renderFlyerDealsGrid();
+      } catch (err) {
+        console.error("Error loading flyer deals:", err);
+      }
+    }
+
+    function selectCircularBanner(banner) {
+      currentBannerFilter = banner;
+      ['NoFrills', 'Walmart', 'Superstore', 'Safeway', 'SaveOn', 'Costco', 'all'].forEach(k => {
+        const btn = document.getElementById(`btnBanner_${k}`);
+        if (btn) btn.className = "px-3.5 py-1.5 bg-white text-[#525252] hover:text-black rounded-full text-xs border border-[#D4D4D8] transition";
+      });
+
+      const keyMap = {
+        'No Frills': 'NoFrills',
+        'Walmart': 'Walmart',
+        'Superstore': 'Superstore',
+        'Safeway': 'Safeway',
+        'Save-On-Foods': 'SaveOn',
+        'Costco': 'Costco',
+        'all': 'all'
+      };
+      const activeBtn = document.getElementById(`btnBanner_${keyMap[banner] || 'all'}`);
+      if (activeBtn) {
+        if (banner === 'No Frills') activeBtn.className = "px-3.5 py-1.5 bg-yellow-400 text-yellow-950 font-bold rounded-full text-xs transition shadow-xs";
+        else activeBtn.className = "px-3.5 py-1.5 bg-[#1A1A1A] text-white font-bold rounded-full text-xs transition shadow-xs";
+      }
+
+      currentCircularPage = 1;
+      if (banner === 'all') {
+        switchFlyerMode('grid');
+      } else {
+        renderPhysicalCircularPage();
+      }
+      renderFlyerDealsGrid();
+    }
+
+    function getMaxPagesForBanner(banner) {
+      if (banner === 'Safeway' || banner === 'Save-On-Foods') return 5;
+      if (banner === 'Costco') return 4;
+      return 6;
+    }
+
+    function navigateCircularPage(delta) {
+      const maxPages = getMaxPagesForBanner(currentBannerFilter);
+      let newPage = currentCircularPage + delta;
+      if (newPage < 1) newPage = maxPages;
+      if (newPage > maxPages) newPage = 1;
+      currentCircularPage = newPage;
+      renderPhysicalCircularPage();
+    }
+
+    function jumpToCircularPage(p) {
+      currentCircularPage = p;
+      renderPhysicalCircularPage();
+    }
+
+    function getBannerTheme(banner) {
+      const b = (banner || '').toLowerCase();
+      if (b.includes('frills')) return { headerClass: 'bg-yellow-400 text-yellow-950', slogan: "WON'T BE BEATEN PRICE GUARANTEE" };
+      if (b.includes('walmart')) return { headerClass: 'bg-[#0071dc] text-white', slogan: 'EVERYDAY LOW PRICES & ROLLBACKS' };
+      if (b.includes('superstore')) return { headerClass: 'bg-[#ea580c] text-white', slogan: "PRESIDENT'S CHOICE & OPTIMUM SAVINGS" };
+      if (b.includes('safeway')) return { headerClass: 'bg-[#b91c1c] text-white', slogan: 'SCENE+ MEMBER BONUS DEALS' };
+      if (b.includes('save-on') || b.includes('save on')) return { headerClass: 'bg-[#059669] text-white', slogan: "DARRELL'S DEALS & WESTERN FAMILY" };
+      return { headerClass: 'bg-[#1e3a8a] text-white', slogan: 'BULK VALUE & MEMBER SPECIALS' };
+    }
+
+    
+    function renderPhysicalCircularPage() {
+      const banner = currentBannerFilter === 'all' ? 'No Frills' : currentBannerFilter;
+      const maxPages = getMaxPagesForBanner(banner);
+      if (currentCircularPage > maxPages) currentCircularPage = 1;
+
+      const pageTitle = PAGE_TITLES[currentCircularPage] || `Page ${currentCircularPage}`;
+      document.getElementById('circularCurrentPageLabel').innerText = `Page ${currentCircularPage} of ${maxPages}: ${pageTitle}`;
+
+      const theme = getBannerTheme(banner);
+
+      const pageDeals = allDeals.filter(d => 
+        d.banner.toLowerCase() === banner.toLowerCase() &&
+        d.page_number === currentCircularPage
+      );
+
+      const thumbStrip = document.getElementById('pageThumbnailsStrip');
+      let thumbsHtml = '';
+      for (let p = 1; p <= maxPages; p++) {
+        const isActive = p === currentCircularPage;
+        thumbsHtml += `
+          <button onclick="jumpToCircularPage(${p})" class="px-3 py-1 rounded-full text-xs font-bold transition ${isActive ? 'bg-[#1A1A1A] text-white shadow-xs' : 'bg-white text-[#525252] hover:text-black border border-[#D4D4D8]'}">
+            P.${p}
+          </button>
+        `;
+      }
+      thumbStrip.innerHTML = thumbsHtml;
+
+      const canvas = document.getElementById('physicalFlyerCanvas');
+
+      // Check if a custom real flyer image was uploaded for this banner and page
+      const customPage = customFlyerPages.find(cp => 
+        cp.banner.toLowerCase() === banner.toLowerCase() &&
+        cp.page_number === currentCircularPage
+      );
+
+      if (customPage) {
+        canvas.innerHTML = `
+          <div class="border-b border-[#D4D4D8] ${theme.headerClass} p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold tracking-widest uppercase opacity-90">${theme.slogan}</span>
+                <span class="bg-black/25 text-white text-[10px] font-bold px-2 py-0.5 rounded-full"><i class="fa-solid fa-image"></i> Custom Uploaded Page</span>
+              </div>
+              <h3 class="text-2xl font-extrabold tracking-tight">${banner} Weekly Flyer</h3>
+              <div class="text-xs opacity-90 mt-0.5">Valid Oct 1 to Oct 7, 2026 · Edmonton & Area Stores</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="deleteCustomFlyerPage('${banner}', ${currentCircularPage})" class="text-xs bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1 rounded-full transition shadow-xs">
+                <i class="fa-solid fa-trash-can mr-1"></i> Revert
+              </button>
+              <span class="inline-block bg-black/25 text-xs font-bold px-3 py-1 rounded-full uppercase">
+                PAGE ${currentCircularPage} OF ${maxPages}
+              </span>
+            </div>
+          </div>
+
+          <div class="p-4 sm:p-6 bg-white flex flex-col items-center">
+            <div class="relative w-full max-w-2xl rounded-2xl overflow-hidden border border-[#D4D4D8] shadow-md group">
+              <img src="${customPage.image_url}" alt="${banner} Page ${currentCircularPage}" class="w-full h-auto object-contain" />
+              <div class="absolute bottom-3 right-3 bg-black/75 text-white text-xs px-3 py-1.5 rounded-full backdrop-blur-xs flex items-center gap-1.5">
+                <i class="fa-solid fa-circle-info text-emerald-400"></i> Click items below to circle & clip
+              </div>
+            </div>
+
+            <!-- Page Item Quick-Clip Bar for this uploaded page -->
+            <div class="w-full mt-6 pt-5 border-t border-[#E7E7E7]">
+              <div class="text-xs font-bold text-black uppercase tracking-wider mb-3">Clip Deals on this Page</div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                ${pageDeals.map(deal => {
+                  const isClipped = clippedItemIds.has(deal.id);
+                  return `
+                    <div onclick="toggleClipFlyerItem(${deal.id}, '${escapeQuote(deal.name)}', this)" class="p-3 bg-[#F7F7F8] hover:bg-white rounded-xl border ${isClipped ? 'deal-clipped-ring' : 'border-[#D4D4D8] hover:border-black'} flex justify-between items-center cursor-pointer transition shadow-xs">
+                      <div class="truncate pr-2">
+                        <div class="text-xs font-bold text-black truncate">${deal.name}</div>
+                        <div class="text-[11px] text-emerald-700 font-bold">${formatDealPrice(deal.sale_price || deal.price)}</div>
+                      </div>
+                      <button class="w-7 h-7 rounded-full ${isClipped ? 'bg-black text-white' : 'bg-white border border-[#D4D4D8] text-black'} flex items-center justify-center text-xs shrink-0">
+                        <i class="fa-solid ${isClipped ? 'fa-check' : 'fa-plus'}"></i>
+                      </button>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      // Default high-fidelity store flyer spread with real product photography
+      let itemsLayoutHtml = '';
+      if (!allDeals || allDeals.length === 0) {
+        itemsLayoutHtml = `<div class="col-span-full py-20 text-center text-[#525252] text-xs"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading weekly flyer deals...</div>`;
+      } else if (pageDeals.length === 0) {
+        itemsLayoutHtml = `<div class="col-span-full py-20 text-center text-[#525252] text-xs">No deals listed on this flyer page.</div>`;
+      } else {
+        itemsLayoutHtml = pageDeals.map((deal, idx) => {
+          const isLead = (idx === 0 || idx === 1) && currentCircularPage === 1;
+          const isClipped = clippedItemIds.has(deal.id);
+          const photoUrl = getProductPhotoUrl(deal.name, deal.category);
+          
+          return `
+            <div 
+              onclick="toggleClipFlyerItem(${deal.id}, '${escapeQuote(deal.name)}', this)" 
+              class="group relative bg-white rounded-2xl border ${isClipped ? 'deal-clipped-ring' : 'border-[#E7E7E7] hover:border-[#1A1A1A]'} p-3.5 flex flex-col justify-between transition-all duration-150 cursor-pointer shadow-xs hover:shadow-lg ${isLead ? 'col-span-2 row-span-2 bg-[#FFFBEB]/50 border-amber-300' : ''}"
+            >
+              ${isClipped ? `<div class="deal-clipped-badge"><i class="fa-solid fa-check"></i> CLIPPED</div>` : ''}
+              
+              <div>
+                <!-- Top Badge Strip -->
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-[10px] font-extrabold uppercase tracking-wider text-[#71717A] bg-[#F4F4F5] px-2.5 py-0.5 rounded-full">${deal.category}</span>
+                  ${deal.discount_text ? `<span class="text-[10px] font-extrabold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full truncate max-w-[130px]">${deal.discount_text}</span>` : (deal.sale_price ? `<span class="text-[10px] font-extrabold text-white bg-rose-600 px-2 py-0.5 rounded-full">SALE</span>` : '')}
+                </div>
+
+                <!-- Product Photo -->
+                <div class="${isLead ? 'h-44' : 'h-32'} w-full rounded-xl overflow-hidden bg-neutral-100 relative mb-2.5 shadow-inner">
+                  <img src="${photoUrl}" alt="${deal.name}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                  ${isLead ? `<span class="absolute top-2 left-2 bg-yellow-400 text-yellow-950 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-sm">DOORCRASHER</span>` : ''}
+                </div>
+
+                <!-- Product Title & Size -->
+                <h4 class="text-xs font-bold text-black line-clamp-2 leading-snug group-hover:text-emerald-700 transition">${deal.name}</h4>
+                <div class="text-[11px] text-[#71717A] mt-0.5">${deal.package_size || ''}</div>
+              </div>
+
+              <!-- Price Box & Action Button -->
+              <div class="mt-3 pt-2.5 border-t border-[#F4F4F5] flex justify-between items-end">
+                <div>
+                  <div class="text-lg font-black text-black tracking-tight">${formatDealPrice(deal.sale_price || deal.price)}</div>
+                  <div class="text-[10px] text-[#71717A] font-semibold">${formatStdPrice(deal.std_price, deal.std_type)}</div>
+                </div>
+
+                <button class="w-8 h-8 rounded-full ${isClipped ? 'bg-[#1A1A1A] text-white shadow-sm' : 'bg-[#E7E7E7] text-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white'} flex items-center justify-center text-xs transition-all duration-150">
+                  <i class="fa-solid ${isClipped ? 'fa-check' : 'fa-plus'}"></i>
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      canvas.innerHTML = `
+        <div class="border-b border-[#D4D4D8] ${theme.headerClass} p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div>
+            <div class="text-xs font-bold tracking-widest uppercase opacity-85">${theme.slogan}</div>
+            <h3 class="text-2xl font-extrabold tracking-tight">${banner} Weekly Flyer</h3>
+            <div class="text-xs opacity-90 mt-0.5">Valid Oct 1 to Oct 7, 2026 · Edmonton & Area Supermarkets</div>
+          </div>
+          <div class="text-right">
+            <span class="inline-block bg-black/25 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+              PAGE ${currentCircularPage} OF ${maxPages}
+            </span>
+          </div>
+        </div>
+
+        <div class="p-4 sm:p-6 bg-[#FAFAFA] grid grid-cols-2 md:grid-cols-4 gap-3.5">
+          ${itemsLayoutHtml}
+        </div>
+
+        <div class="bg-[#F7F7F8] border-t border-[#D4D4D8] p-3 text-center text-xs text-[#71717A] font-meta flex items-center justify-center gap-2">
+          <i class="fa-solid fa-arrow-pointer text-xs"></i>
+          <span>Click any product deal on the flyer spread to circle and add it directly to your shopping basket.</span>
+        </div>
+      `;
+    }
+
+
+    function toggleClipFlyerItem(itemId, productName, el) {
+      const deal = allDeals.find(d => d.id === itemId);
+      if (!deal) return;
+
+      if (clippedItemIds.has(itemId)) {
+        clippedItemIds.delete(itemId);
+        currentBasket = currentBasket.filter(item => item.name.toLowerCase() !== productName.toLowerCase());
+        showToast(`Unclipped: ${productName}`);
+      } else {
+        clippedItemIds.add(itemId);
+        addItemToBasket(productName, 1, 'unit');
+        showToast(`Clipped: ${productName} (${formatDealPrice(deal.sale_price || deal.price)})`);
+      }
+
+      document.getElementById('clippedCountBadge').innerText = `${clippedItemIds.size} Clipped`;
+      renderPhysicalCircularPage();
+      renderFlyerDealsGrid();
+    }
+
+    function renderFlyerDealsGrid() {
+      const grid = document.getElementById('flyerDealsGrid');
+      let filtered = allDeals;
+
+      if (currentBannerFilter !== 'all') {
+        filtered = filtered.filter(d => d.banner.toLowerCase() === currentBannerFilter.toLowerCase());
+      }
+
+      if (currentCategoryFilter !== 'all') {
+        filtered = filtered.filter(d => d.category.toLowerCase().includes(currentCategoryFilter.toLowerCase()));
+      }
+
+      if (currentSearchQuery) {
+        filtered = filtered.filter(d => d.name.toLowerCase().includes(currentSearchQuery.toLowerCase()));
+      }
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `<div class="col-span-full py-16 text-center text-[#525252] text-xs">No flyer deals match current filters.</div>`;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(deal => {
+        const isClipped = clippedItemIds.has(deal.id);
+        return `
+          <div class="bg-white rounded-2xl border ${isClipped ? 'deal-clipped-ring' : 'border-[#D4D4D8] hover:border-black'} p-4 flex flex-col justify-between transition-all shadow-xs hover:shadow-md relative">
+            ${isClipped ? `<div class="deal-clipped-badge"><i class="fa-solid fa-check"></i> CLIPPED</div>` : ''}
+            <div>
+              <div class="flex justify-between items-center text-[10px] uppercase font-bold text-[#71717A] mb-2">
+                <span>${deal.banner}</span>
+                <span class="bg-[#F4F4F5] px-2 py-0.5 rounded-full">${deal.category}</span>
+              </div>
+
+              <h4 class="text-xs font-bold text-black line-clamp-2 leading-snug">${deal.name}</h4>
+              <div class="text-[11px] text-[#71717A] mt-0.5">${deal.package_size || ''}</div>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-[#F4F4F5] flex justify-between items-end">
+              <div>
+                <div class="text-base font-extrabold text-black">${formatDealPrice(deal.sale_price || deal.price)}</div>
+                  <div class="text-[10px] text-[#71717A]">${formatStdPrice(deal.std_price, deal.std_type)}</div>
+              </div>
+              <button onclick="toggleClipFlyerItem(${deal.id}, '${escapeQuote(deal.name)}', this)" class="px-3 py-1.5 rounded-full text-xs font-bold ${isClipped ? 'bg-[#1A1A1A] text-white' : 'bg-[#E7E7E7] text-[#1A1A1A] hover:bg-black hover:text-white'} transition">
+                ${isClipped ? 'Clipped' : '+ Clip'}
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function debounceSearchFlyers() {
+      clearTimeout(searchDebounceTimeout);
+      searchDebounceTimeout = setTimeout(() => {
+        currentSearchQuery = document.getElementById('flyerSearchInput').value.trim();
+        renderFlyerDealsGrid();
+      }, 250);
+    }
+
+    function filterFlyerCategory(cat) {
+      currentCategoryFilter = cat;
+      ['all', 'Meat', 'Produce', 'Dairy', 'Pantry', 'Bakery'].forEach(c => {
+        const btn = document.getElementById(`btnCat_${c}`);
+        if (btn) btn.className = "px-3 py-1 rounded-full bg-white text-[#525252] hover:text-black border border-[#D4D4D8] text-xs";
+      });
+
+      const activeKey = cat === 'Meat & Seafood' ? 'Meat' : (cat === 'Dairy & Eggs' ? 'Dairy' : (cat === 'Pantry & Groceries' ? 'Pantry' : (cat === 'Bakery & Deli' ? 'Bakery' : cat)));
+      const activeBtn = document.getElementById(`btnCat_${activeKey}`);
+      if (activeBtn) activeBtn.className = "px-3 py-1 rounded-full bg-[#1A1A1A] text-white font-bold text-xs";
+
+      renderFlyerDealsGrid();
+    }
+
+    function showToast(msg) {
+      const existing = document.getElementById('smartcartToast');
+      if (existing) existing.remove();
+
+      const toast = document.createElement('div');
+      toast.id = 'smartcartToast';
+      toast.className = 'fixed bottom-24 right-6 bg-[#1A1A1A] text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-2xl z-50 transition-all transform duration-300';
+      toast.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400 mr-2"></i>${msg}`;
+      document.body.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 2500);
+    }
+
+    async function updatePostalCode() {
+      const code = document.getElementById('postalCodeInput').value.trim().toUpperCase();
+      if (!code) return;
+
+      try {
+        const res = await fetch('/api/geocode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: code })
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          userLocation = {
+            postal_code: code,
+            label: `${code} (Edmonton)`,
+            lat: data.lat,
+            lon: data.lon
+          };
+          document.getElementById('headerLocationLabel').innerText = `${code} (Edmonton)`;
+          showToast(`Location set to ${code}`);
+          if (currentBasket.length > 0) {
+            runOptimization();
+          }
+        } else {
+          alert(data.message || "Could not geocode that Edmonton postal code. Using default Downtown Edmonton.");
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function fetchNearbyStores() {
+      try {
+        const res = await fetch(`/api/stores/nearby?lat=${userLocation.lat}&lon=${userLocation.lon}&radius_km=25`);
+        const data = await res.json();
+        const list = document.getElementById('nearbyStoresModalList');
+        if (!data.stores || data.stores.length === 0) {
+          list.innerHTML = `<div class="text-xs text-[#525252] text-center py-6">No stores found.</div>`;
+          return;
+        }
+
+        list.innerHTML = data.stores.map(s => `
+          <div class="p-3 bg-[#F7F7F8] rounded-xl border border-[#D4D4D8] flex justify-between items-center">
+            <div>
+              <div class="text-xs font-extrabold text-black">${s.name}</div>
+              <div class="text-[11px] text-[#525252]">${s.address}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs font-bold text-black">${s.distance_km.toFixed(1)} km</div>
+              <div class="text-[10px] text-[#71717A]">${s.banner}</div>
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function toggleNearbyStoresModal() {
+      const modal = document.getElementById('nearbyStoresModal');
+      modal.classList.toggle('hidden');
+      if (!modal.classList.contains('hidden')) {
+        fetchNearbyStores();
+      }
+    }
+
+    function switchInputTab(tab) {
+      if (tab === 'recipe') {
+        document.getElementById('recipeTab').classList.remove('hidden');
+        document.getElementById('searchTab').classList.add('hidden');
+        document.getElementById('tabRecipeBtn').className = "flex-1 py-3 px-4 text-black bg-[#F7F7F8] border-r border-[#D4D4D8] border-b-2 border-black flex items-center justify-center gap-1.5";
+        document.getElementById('tabSearchBtn').className = "flex-1 py-3 px-4 text-[#525252] hover:text-black flex items-center justify-center gap-1.5";
+      } else {
+        document.getElementById('recipeTab').classList.add('hidden');
+        document.getElementById('searchTab').classList.remove('hidden');
+        document.getElementById('tabSearchBtn').className = "flex-1 py-3 px-4 text-black bg-[#F7F7F8] border-b-2 border-black flex items-center justify-center gap-1.5";
+        document.getElementById('tabRecipeBtn').className = "flex-1 py-3 px-4 text-[#525252] hover:text-black border-r border-[#D4D4D8] flex items-center justify-center gap-1.5";
+      }
+    }
+
+    function loadSample(key) {
+      const items = SAMPLES[key];
+      if (!items) return;
+      currentBasket = items.map(it => ({ ...it }));
+      renderBasket();
+      runOptimization();
+      showToast(`Loaded ${items.length} items from preset`);
+    }
+
+    async function parseRecipe() {
+      const text = document.getElementById('recipeInput').value.trim();
+      if (!text) return;
+
+      try {
+        const res = await fetch('/api/recipes/parse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+        const data = await res.json();
+        if (data.items && data.items.length > 0) {
+          data.items.forEach(it => {
+            currentBasket.push({ name: it.name, quantity: it.quantity || 1, unit: it.unit || 'unit' });
+          });
+          document.getElementById('recipeInput').value = '';
+          renderBasket();
+          runOptimization();
+          showToast(`Parsed & added ${data.items.length} ingredients`);
+        } else {
+          alert("Could not recognize ingredients in input text.");
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function searchOmnibar() {
+      const q = document.getElementById('omniInput').value.trim();
+      if (!q) return;
+
+      const preview = document.getElementById('searchResultPreview');
+      preview.classList.remove('hidden');
+      preview.innerHTML = `<div class="text-xs text-[#525252] flex items-center gap-2"><i class="fa-solid fa-spinner fa-spin"></i> Searching catalog for "${q}"...</div>`;
+
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+
+        let results = [];
+        if (data.results && data.results.length > 0) {
+          results = data.results;
+        } else if (data.matched && data.product) {
+          const bp = (data.store_prices && data.store_prices[0]) ? data.store_prices[0] : null;
+          results = [{
+            id: data.product.id,
+            name: data.product.name,
+            category: data.product.category,
+            brand: data.product.brand,
+            package_size: `${data.product.package_quantity || 1} ${data.product.package_unit || 'unit'}`,
+            banner: bp ? bp.banner : 'Edmonton Grocers',
+            price: bp ? bp.price : 0.0,
+            unit_price: bp ? bp.unit_price : 0.0
+          }];
+        }
+
+        if (results.length === 0) {
+          preview.innerHTML = `<div class="text-xs text-[#525252]">No products found matching "${q}". Try another term (e.g. banana, milk, chicken, eggs, rice).</div>`;
+          return;
+        }
+
+        preview.innerHTML = `
+          <div class="text-[11px] font-bold text-[#525252] uppercase mb-2">Matching Products for "${q}":</div>
+          <div class="space-y-1.5">
+            ${results.map(p => `
+              <div class="flex justify-between items-center p-2.5 rounded-xl bg-white border border-[#D4D4D8] shadow-xs">
+                <div>
+                  <div class="text-xs font-bold text-black">${p.name}</div>
+                  <div class="text-[10px] text-[#71717A]">${p.package_size || ''} · ${p.banner} ($${(p.price || 0).toFixed(2)})</div>
+                </div>
+                <button onclick="addSearchToBasket('${escapeQuote(p.name)}', 1, 'unit')" class="px-3 py-1 bg-[#1A1A1A] hover:bg-black text-white rounded-full text-xs font-bold transition shadow-xs">
+                  + Add
+                </button>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } catch (err) {
+        console.error("Search error:", err);
+        preview.innerHTML = `<div class="text-xs text-rose-600">Error connecting to catalog search service.</div>`;
+      }
+    }
+
+    function addSearchToBasket(name, qty, unit) {
+      addItemToBasket(name, qty, unit);
+      document.getElementById('searchResultPreview').classList.add('hidden');
+      document.getElementById('omniInput').value = '';
+      showToast(`Added: ${name}`);
+    }
+
+    function addItemToBasket(name, qty, unit) {
+      currentBasket.push({ name, quantity: qty || 1, unit: unit || 'unit' });
+      renderBasket();
+      runOptimization();
+    }
+
+    function removeBasketItem(idx) {
+      currentBasket.splice(idx, 1);
+      renderBasket();
+      if (currentBasket.length > 0) {
+        runOptimization();
+      } else {
+        clearResultsUI();
+      }
+    }
+
+    function clearBasket() {
+      currentBasket = [];
+      clippedItemIds.clear();
+      renderBasket();
+      clearResultsUI();
+      document.getElementById('clippedCountBadge').innerText = '0 Clipped';
+      if (currentFlyerMode === 'circular') renderPhysicalCircularPage();
+      else renderFlyerDealsGrid();
+    }
+
+    function renderBasket() {
+      const container = document.getElementById('basketItemsList');
+      const badge = document.getElementById('itemCountBadge');
+      if (badge) badge.innerText = `${currentBasket.length} items`;
+      updateCartCounters();
+
+      if (currentBasket.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-6 space-y-3">
+            <div class="w-12 h-12 rounded-full bg-white border border-[#D4D4D8] mx-auto flex items-center justify-center text-lg text-[#525252]">
+              <i class="fa-solid fa-cart-arrow-down"></i>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-black">Your shopping basket is empty</div>
+              <p class="text-[11px] text-[#71717A] max-w-xs mx-auto mt-0.5">Add a recipe, search an item, or tap a popular Edmonton staple below:</p>
+            </div>
+            <div class="flex flex-wrap gap-1.5 justify-center pt-1.5">
+              <button onclick="addSearchToBasket('Bananas', 1, 'kg')" class="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white border border-[#D4D4D8] hover:border-black text-[#1A1A1A] transition shadow-2xs">+ 🍌 Bananas</button>
+              <button onclick="addSearchToBasket('2% Partly Skimmed Milk', 4, 'L')" class="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white border border-[#D4D4D8] hover:border-black text-[#1A1A1A] transition shadow-2xs">+ 🥛 4L Milk</button>
+              <button onclick="addSearchToBasket('Large Grade A White Eggs (12-pack)', 1, 'unit')" class="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white border border-[#D4D4D8] hover:border-black text-[#1A1A1A] transition shadow-2xs">+ 🥚 12 Eggs</button>
+              <button onclick="addSearchToBasket('Boneless Skinless Chicken Thighs', 1, 'kg')" class="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white border border-[#D4D4D8] hover:border-black text-[#1A1A1A] transition shadow-2xs">+ 🍗 Chicken</button>
+              <button onclick="addSearchToBasket('Lean Ground Beef', 1, 'kg')" class="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white border border-[#D4D4D8] hover:border-black text-[#1A1A1A] transition shadow-2xs">+ 🥩 Beef</button>
+              <button onclick="addSearchToBasket('White Sliced Sandwich Bread', 1, 'unit')" class="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white border border-[#D4D4D8] hover:border-black text-[#1A1A1A] transition shadow-2xs">+ 🍞 Bread</button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = currentBasket.map((it, idx) => `
+        <div class="flex justify-between items-center p-2.5 bg-white rounded-xl border border-[#D4D4D8] text-xs shadow-xs hover:border-[#1A1A1A] transition duration-150">
+          <div class="flex items-center gap-2 truncate pr-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+            <span class="font-bold text-black capitalize truncate">${it.name}</span>
+            <span class="text-[#71717A] text-[11px] shrink-0">(${it.unit})</span>
+          </div>
+
+          <div class="flex items-center gap-2 shrink-0">
+            <!-- Inline Quantity Stepper -->
+            <div class="flex items-center border border-[#D4D4D8] rounded-full bg-[#F7F7F8] p-0.5">
+              <button onclick="changeBasketItemQty(${idx}, -1)" class="w-6 h-6 rounded-full hover:bg-white flex items-center justify-center text-xs font-bold text-[#525252] hover:text-black transition" title="Decrease">
+                <i class="fa-solid fa-minus text-[9px]"></i>
+              </button>
+              <span class="w-6 text-center text-xs font-black text-black">${it.quantity}</span>
+              <button onclick="changeBasketItemQty(${idx}, 1)" class="w-6 h-6 rounded-full hover:bg-white flex items-center justify-center text-xs font-bold text-[#525252] hover:text-black transition" title="Increase">
+                <i class="fa-solid fa-plus text-[9px]"></i>
+              </button>
+            </div>
+
+            <!-- Delete Item -->
+            <button onclick="removeBasketItem(${idx})" class="w-7 h-7 rounded-full hover:bg-rose-50 text-[#A9A9A9] hover:text-rose-600 flex items-center justify-center transition" title="Remove item">
+              <i class="fa-solid fa-trash-can text-[11px]"></i>
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function changeBasketItemQty(idx, delta) {
+      if (idx < 0 || idx >= currentBasket.length) return;
+      const item = currentBasket[idx];
+      const newQty = Math.round((item.quantity + delta) * 10) / 10;
+      if (newQty <= 0) {
+        removeBasketItem(idx);
+        return;
+      }
+      item.quantity = newQty;
+      renderBasket();
+      runOptimization();
+      showToast(`Updated ${item.name}: ${newQty} ${item.unit}`);
+    }
+
+    function updateCartCounters() {
+      const count = currentBasket.length;
+      const mobBadge = document.getElementById('mobileCartCount');
+      if (mobBadge) mobBadge.innerText = count;
+
+      const floatBar = document.getElementById('floatingCartBar');
+      const floatBadge = document.getElementById('floatingCartBadge');
+      const floatText = document.getElementById('floatingCartText');
+
+      if (count > 0 && floatBar) {
+        floatBar.classList.remove('hidden');
+        if (floatBadge) floatBadge.innerText = count;
+        const bestPlan = optimizationResults?.plans?.[selectedPlanKey];
+        const cost = bestPlan?.total_cost || bestPlan?.all_in_cost || bestPlan?.grocery_cost || 0;
+        if (floatText) {
+          floatText.innerText = cost > 0 ? `${count} items · $${cost.toFixed(2)}` : `${count} items · Ready to Optimize`;
+        }
+      } else if (floatBar) {
+        floatBar.classList.add('hidden');
+      }
+    }
+
+    function scrollToBasket() {
+      switchMainView('optimizer');
+      const el = document.getElementById('basketItemsList');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function scrollToTopStage() {
+      const el = document.getElementById('mediaStage');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function scrollToBasketAndOptimize() {
+      switchMainView('optimizer');
+      if (currentBasket.length > 0 && !optimizationResults) {
+        runOptimization();
+      }
+      const el = document.getElementById('activePlanBadge');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    let omniDebounceTimer = null;
+    function debounceSearchOmnibar() {
+      clearTimeout(omniDebounceTimer);
+      omniDebounceTimer = setTimeout(() => {
+        const q = document.getElementById('omniInput').value.trim();
+        if (q.length >= 2) {
+          searchOmnibar();
+        } else if (q.length === 0) {
+          document.getElementById('searchResultPreview').classList.add('hidden');
+        }
+      }, 250);
+    }
+
+    function setOmniCategory(cat) {
+      document.getElementById('omniInput').value = cat;
+      searchOmnibar();
+    }
+
+    function setOmniSearch(term) {
+      document.getElementById('omniInput').value = term;
+      searchOmnibar();
+    }
+
+    function _original_renderBasket_unused() {
+      const container = document.getElementById('basketItemsList');
+      const badge = document.getElementById('itemCountBadge');
+      badge.innerText = `${currentBasket.length} items`;
+
+      if (currentBasket.length === 0) {
+        container.innerHTML = `<p class="text-xs text-[#525252] text-center py-8">Basket is empty. Add a recipe, search an item, or clip deals from the weekly flyer.</p>`;
+        return;
+      }
+
+      container.innerHTML = currentBasket.map((it, idx) => `
+        <div class="flex justify-between items-center p-2.5 bg-white rounded-xl border border-[#D4D4D8] text-xs shadow-xs">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-black"></span>
+            <span class="font-bold text-black capitalize">${it.name}</span>
+            <span class="text-[#71717A] text-[11px]">(${it.quantity} ${it.unit})</span>
+          </div>
+          <button onclick="removeBasketItem(${idx})" class="text-[#A9A9A9] hover:text-rose-600 transition">
+            <i class="fa-solid fa-xmark text-xs"></i>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    let currentGasPrice = 1.53;
+
+    async function fetchLiveGasPrice() {
+      try {
+        const res = await fetch('/api/gas-price');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.price_per_litre) {
+            currentGasPrice = data.price_per_litre;
+            const badge = document.getElementById('liveGasBadge');
+            if (badge) badge.innerText = "$" + currentGasPrice.toFixed(2) + "/L";
+            const valEl = document.getElementById('breakdownGasPriceVal');
+            if (valEl) valEl.innerText = currentGasPrice.toFixed(2);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch real-time gas price, using Edmonton baseline', err);
+      }
+    }
+
+    async function runOptimization() {
+      if (currentBasket.length === 0) {
+        clearResultsUI();
+        return;
+      }
+
+      const btn = document.getElementById('optimizeBtn');
+      if (btn) {
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Calculating Route Combinations...`;
+        btn.disabled = true;
+      }
+
+      const radius = parseFloat(document.getElementById('radiusSelect')?.value) || 15;
+      const excludeCostco = document.getElementById('excludeCostco')?.checked || false;
+
+      try {
+        const res = await fetch('/api/optimize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: currentBasket,
+            user_lat: userLocation.lat,
+            user_lon: userLocation.lon,
+            max_radius_km: radius,
+            radius_km: radius,
+            exclude_membership: excludeCostco,
+            exclude_costco: excludeCostco
+          })
+        });
+
+        const data = await res.json();
+        if (data.error) {
+          console.warn("Optimization error:", data.error);
+          return;
+        }
+
+        optimizationResults = data;
+        updatePlanCards();
+        renderActivePlan();
+        renderComparisonTable();
+      } catch (err) {
+        console.error("Optimization error:", err);
+      } finally {
+        if (btn) {
+          btn.innerHTML = `<i class="fa-solid fa-calculator"></i> Run 3-Plan Optimizer`;
+          btn.disabled = false;
+        }
+      }
+    }
+
+    function updatePlanCards() {
+      if (!optimizationResults || !optimizationResults.plans) return;
+      const userPostal = optimizationResults.user_location?.postal_code || document.getElementById('postalCodeInput').value.trim() || 'T5J 1N2';
+
+      const p1 = optimizationResults.plans.maximum_saver;
+      if (p1) {
+        const cost = p1.total_cost ?? p1.all_in_cost ?? p1.grocery_cost ?? 0;
+        const groc = p1.grocery_total ?? p1.grocery_cost ?? 0;
+        const gas = p1.gas_cost ?? p1.travel_cost ?? 0;
+        const dist = p1.total_distance_km ?? (p1.distance_km ? p1.distance_km * 2 : 0);
+        const sv = p1.savings_vs_single ?? p1.savings_vs_market_avg ?? 0;
+        const pct = (p1.savings_percent ?? p1.pct_savings) ? Math.round(p1.savings_percent ?? p1.pct_savings) : 0;
+        document.getElementById('maxSaverPrice').innerText = `$${cost.toFixed(2)}`;
+        document.getElementById('maxSaverSavings').innerText = `Save $${sv.toFixed(2)} (${pct}%)`;
+        const b1 = document.getElementById('maxSaverBreakdown');
+        if (b1) b1.innerText = `Groceries: $${groc.toFixed(2)} · Gas: $${gas.toFixed(2)}`;
+        const r1 = document.getElementById('maxSaverRoute');
+        if (r1) r1.innerText = `${dist.toFixed(1)} km round-trip from ${userPostal}`;
+      }
+
+      const p2 = optimizationResults.plans.best_single_run;
+      if (p2) {
+        const cost = p2.total_cost ?? p2.all_in_cost ?? p2.grocery_cost ?? 0;
+        const groc = p2.grocery_total ?? p2.grocery_cost ?? 0;
+        const gas = p2.gas_cost ?? p2.travel_cost ?? 0;
+        const dist = p2.total_distance_km ?? (p2.distance_km ? p2.distance_km * 2 : 0);
+        document.getElementById('singleRunPrice').innerText = `$${cost.toFixed(2)}`;
+        const storeName = (p2.stores && p2.stores[0]) ? (p2.stores[0].chain || p2.stores[0].store_name) : (p2.store ? (p2.store.banner || p2.store.name) : '1 Store');
+        document.getElementById('singleRunStore').innerText = storeName;
+        const b2 = document.getElementById('singleRunBreakdown');
+        if (b2) b2.innerText = `Groceries: $${groc.toFixed(2)} · Gas: $${gas.toFixed(2)}`;
+        const r2 = document.getElementById('singleRunRoute');
+        if (r2) r2.innerText = `${dist.toFixed(1)} km round-trip from ${userPostal}`;
+      }
+
+      const p3 = optimizationResults.plans.in_stock_guaranteed;
+      if (p3) {
+        const cost = p3.total_cost ?? p3.all_in_cost ?? p3.grocery_cost ?? 0;
+        const groc = p3.grocery_total ?? p3.grocery_cost ?? 0;
+        const gas = p3.gas_cost ?? p3.travel_cost ?? 0;
+        const dist = p3.total_distance_km ?? (p3.distance_km ? p3.distance_km * 2 : 0);
+        document.getElementById('inStockPrice').innerText = `$${cost.toFixed(2)}`;
+        const b3 = document.getElementById('inStockBreakdown');
+        if (b3) b3.innerText = `Groceries: $${groc.toFixed(2)} · Gas: $${gas.toFixed(2)}`;
+        const r3 = document.getElementById('inStockRoute');
+        if (r3) r3.innerText = `${dist.toFixed(1)} km round-trip from ${userPostal}`;
+      }
+    }
+
+    function selectPlan(key) {
+      selectedPlanKey = key;
+      ['cardMaxSaver', 'cardSingleRun', 'cardInStock'].forEach(id => {
+        const el = document.getElementById(id);
+        el.className = "cursor-pointer bg-[#F7F7F8] p-5 rounded-2xl border border-[#D4D4D8] relative transition hover:border-[#1A1A1A]";
+      });
+
+      const map = {
+        maximum_saver: 'cardMaxSaver',
+        best_single_run: 'cardSingleRun',
+        in_stock_guaranteed: 'cardInStock'
+      };
+      const activeEl = document.getElementById(map[key]);
+      if (activeEl) {
+        activeEl.className = "cursor-pointer bg-[#F7F7F8] p-5 rounded-2xl border-2 border-[#1A1A1A] relative transition shadow-sm";
+      }
+
+      renderActivePlan();
+    }
+
+    function renderActivePlan() {
+      if (!optimizationResults || !optimizationResults.plans) return;
+
+      const plan = optimizationResults.plans[selectedPlanKey];
+      if (!plan) return;
+
+      const titles = {
+        maximum_saver: 'Plan 1: Maximum Saver (Multi-Store Split)',
+        best_single_run: 'Plan 2: Best Single Run (1 Stop)',
+        in_stock_guaranteed: 'Plan 3: In-Stock Guaranteed (100% Shelf)'
+      };
+
+      const totalCost = plan.total_cost ?? plan.all_in_cost ?? 0;
+      const groceryTotal = plan.grocery_total ?? plan.grocery_cost ?? 0;
+      const gasCost = plan.gas_cost ?? plan.travel_cost ?? plan.estimated_travel_cost ?? 0;
+      const gasPrice = plan.gas_price_per_litre || 1.42;
+      const sv = plan.savings_vs_single ?? plan.savings_vs_market_avg ?? 0;
+      const pct = (plan.savings_percent ?? plan.pct_savings) ? Math.round(plan.savings_percent ?? plan.pct_savings) : 0;
+
+      document.getElementById('activePlanBadge').innerText = titles[selectedPlanKey] || 'Plan Details';
+      
+      let stores = plan.stores || [];
+      if (!stores.length) {
+        if (plan.store_groups && plan.store_groups.length) {
+          stores = plan.store_groups.map(g => ({
+            store_name: g.store.name,
+            chain: g.store.banner,
+            address: g.store.address,
+            store_subtotal: g.subtotal,
+            items: g.items
+          }));
+        } else if (plan.store) {
+          stores = [{
+            store_name: plan.store.name,
+            chain: plan.store.banner,
+            address: plan.store.address,
+            store_subtotal: groceryTotal,
+            items: plan.items || []
+          }];
+        }
+      }
+
+      document.getElementById('activePlanStoresCount').innerText = `${stores.length} Store${stores.length > 1 ? 's' : ''}`;
+      document.getElementById('activePlanTitle').innerText = stores.length > 1 ? 'Multi-Store Split' : (stores[0] ? stores[0].store_name : 'Single Store Run');
+      
+      document.getElementById('activePlanTotalCost').innerText = `$${totalCost.toFixed(2)}`;
+      document.getElementById('activePlanBreakdown').innerText = `Groceries: $${groceryTotal.toFixed(2)} + Gas: $${gasCost.toFixed(2)}`;
+
+      // Dedicated Breakdown Card Elements
+      document.getElementById('breakdownGroceries').innerText = `$${groceryTotal.toFixed(2)}`;
+      const totalItemsCount = stores.reduce((acc, st) => acc + (st.items ? st.items.length : 0), 0);
+      document.getElementById('breakdownItemCount').innerText = `${totalItemsCount} item(s) across ${stores.length} store${stores.length > 1 ? 's' : ''}`;
+
+      document.getElementById('breakdownGas').innerText = `$${gasCost.toFixed(2)}`;
+      document.getElementById('breakdownGasCalc').innerText = `@ Edmonton avg $${gasPrice.toFixed(2)}/L (9.5 L/100km)`;
+
+      const finalEl = document.getElementById('breakdownFinalTotal');
+      if (finalEl) finalEl.innerText = `$${totalCost.toFixed(2)}`;
+
+      const savingsBanner = document.getElementById('savingsBannerAmount');
+      savingsBanner.innerText = `$${sv.toFixed(2)} (${pct}%)`;
+
+      // Render Store Stops Cards
+      const stopsContainer = document.getElementById('storeStopsContainer');
+      if (stores.length === 0) {
+        stopsContainer.innerHTML = `<p class="text-xs text-[#525252]">No stores required.</p>`;
+        return;
+      }
+
+      stopsContainer.innerHTML = stores.map((st, i) => `
+        <div class="p-4 bg-white rounded-2xl border border-[#D4D4D8] space-y-3 shadow-xs">
+          <div class="flex justify-between items-center">
+            <div class="flex items-center gap-2.5">
+              <span class="w-6 h-6 rounded-full bg-[#1A1A1A] text-white flex items-center justify-center text-xs font-bold">${i+1}</span>
+              <div>
+                <span class="text-sm font-extrabold text-black">${st.store_name}</span>
+                <div class="text-[11px] text-[#71717A]">${st.address || ''}</div>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="text-base font-black text-black">$${(st.store_subtotal || 0).toFixed(2)}</span>
+              <span class="text-[10px] text-[#71717A] ml-1">(${st.items ? st.items.length : 0} items)</span>
+            </div>
+          </div>
+
+          <!-- Items at this store -->
+          <div class="pt-2 border-t border-[#F4F4F5] grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            ${(st.items || []).map(it => `
+              <div class="flex justify-between items-center p-2 rounded-xl bg-[#F7F7F8] border border-[#EAEAEA]">
+                <div class="truncate pr-2">
+                  <div class="font-bold text-black capitalize">${it.matched_name || it.item_name}</div>
+                  <div class="text-[10px] text-[#71717A]">${it.requested || it.package_size || ''}</div>
+                </div>
+                <div class="text-right shrink-0">
+                  <div class="font-extrabold text-black">$${(it.total_cost || it.price || 0).toFixed(2)}</div>
+                  ${it.unit_price ? `<div class="text-[10px] text-emerald-700 font-bold">$${it.unit_price.toFixed(2)}${formatUnitLabel(it.std_type)}</div>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function renderComparisonTable() {
+      const tbody = document.getElementById('comparisonTableBody');
+      if (currentBasket.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-[#525252]">No items in basket.</td></tr>`;
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/comparison', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: currentBasket })
+        });
+        const data = await res.json();
+        
+        if (!data.matrix || data.matrix.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-[#525252]">Price comparison unavailable for selected items.</td></tr>`;
+          return;
+        }
+
+        const chains = ['Superstore', 'Walmart', 'No Frills', 'Safeway', 'Costco', 'Save-On-Foods'];
+
+        tbody.innerHTML = data.matrix.map(row => {
+          let chainCells = chains.map(ch => {
+            const match = row.prices ? row.prices.find(p => p.chain.toLowerCase() === ch.toLowerCase()) : null;
+            if (!match) return `<td class="py-2.5 px-2 text-[#A9A9A9]">-</td>`;
+            const isLowest = match.is_lowest;
+            return `
+              <td class="py-2.5 px-2 ${isLowest ? 'font-bold text-emerald-700 bg-emerald-50 rounded-lg' : 'text-black'}">
+                $${match.price.toFixed(2)}
+                <div class="text-[9px] text-[#71717A]">$${match.std_price.toFixed(2)}</div>
+              </td>
+            `;
+          }).join('');
+
+          return `
+            <tr>
+              <td class="py-2.5 px-3 font-bold text-black capitalize">${row.item_name}</td>
+              ${chainCells}
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error("Comparison error:", err);
+      }
+    }
+
+    function clearResultsUI() {
+      optimizationResults = null;
+      document.getElementById('maxSaverPrice').innerText = '--';
+      document.getElementById('maxSaverSavings').innerText = '--';
+      document.getElementById('singleRunPrice').innerText = '--';
+      document.getElementById('singleRunStore').innerText = '--';
+      document.getElementById('inStockPrice').innerText = '--';
+      document.getElementById('activePlanTotalCost').innerText = '$0.00';
+      document.getElementById('activePlanBreakdown').innerText = 'Groceries: $0.00 + Gas: $0.00';
+      document.getElementById('breakdownGroceries').innerText = '$0.00';
+      document.getElementById('breakdownGas').innerText = '$0.00';
+      document.getElementById('breakdownDistance').innerText = '0.0 km';
+      document.getElementById('savingsBannerAmount').innerText = '$0.00 (0%)';
+      document.getElementById('routeStepperContainer').innerHTML = `<p class="text-xs text-[#525252] py-2">Add items to basket and run the optimizer to view route itinerary.</p>`;
+      document.getElementById('storeStopsContainer').innerHTML = `<p class="text-xs text-[#525252] py-2">Add items to basket and run the optimizer.</p>`;
+      const btnRoute = document.getElementById('btnOpenFullRoute');
+      if (btnRoute) { btnRoute.classList.add('hidden'); btnRoute.classList.remove('flex'); }
+      document.getElementById('comparisonTableBody').innerHTML = `<tr><td colspan="7" class="text-center py-5 text-[#525252]">No items in basket.</td></tr>`;
+    }
+
+    function getCategoryIcon(cat) {
+      const c = (cat || '').toLowerCase();
+      if (c.includes('meat') || c.includes('seafood') || c.includes('beef') || c.includes('chicken')) return '🥩';
+      if (c.includes('produce') || c.includes('fruit') || c.includes('vegetable')) return '🥦';
+      if (c.includes('dairy') || c.includes('egg') || c.includes('milk') || c.includes('cheese')) return '🥛';
+      if (c.includes('bakery') || c.includes('bread')) return '🍞';
+      return '🛒';
+    }
+
+    function escapeQuote(str) {
+      return (str || '').replace(/'/g, "\\'");
+    }
+
+    // Auto load sample on start
+    
+    let uploadedFileBase64 = null;
+
+    function openUploadFlyerModal() {
+      const banner = currentBannerFilter === 'all' ? 'No Frills' : currentBannerFilter;
+      document.getElementById('uploadStoreSelect').value = banner;
+      document.getElementById('uploadPageSelect').value = currentCircularPage;
+      document.getElementById('uploadPrompt').classList.remove('hidden');
+      document.getElementById('previewContainer').classList.add('hidden');
+      uploadedFileBase64 = null;
+      document.getElementById('uploadFlyerModal').classList.remove('hidden');
+    }
+
+    function closeUploadFlyerModal() {
+      document.getElementById('uploadFlyerModal').classList.add('hidden');
+    }
+
+    function handleFlyerFileSelect(input) {
+      const file = input.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        uploadedFileBase64 = e.target.result;
+        document.getElementById('imagePreview').src = uploadedFileBase64;
+        document.getElementById('previewFileName').innerText = file.name;
+        document.getElementById('uploadPrompt').classList.add('hidden');
+        document.getElementById('previewContainer').classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function submitFlyerUpload() {
+      if (!uploadedFileBase64) {
+        alert("Please select an image file first.");
+        return;
+      }
+
+      const banner = document.getElementById('uploadStoreSelect').value;
+      const pageNumber = parseInt(document.getElementById('uploadPageSelect').value) || 1;
+      const btn = document.getElementById('btnSubmitUpload');
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Uploading...`;
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/flyers/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            banner: banner,
+            page_number: pageNumber,
+            image_base64: uploadedFileBase64,
+            title: `${banner} Page ${pageNumber}`
+          })
+        });
+
+        const data = await res.json();
+        if (data.status === 'ok') {
+          showToast(`Uploaded flyer image for ${banner} Page ${pageNumber}!`);
+          closeUploadFlyerModal();
+          await loadCustomFlyerPages();
+          currentBannerFilter = banner;
+          currentCircularPage = pageNumber;
+          renderPhysicalCircularPage();
+        } else {
+          alert(data.detail || "Failed to upload flyer image.");
+        }
+      } catch (err) {
+        console.error("Upload error:", err);
+        alert("Error connecting to upload service.");
+      } finally {
+        btn.innerHTML = `<i class="fa-solid fa-check"></i> Set Flyer Page`;
+        btn.disabled = false;
+      }
+    }
+
+    async function deleteCustomFlyerPage(banner, pageNumber) {
+      if (!confirm(`Revert to standard graphic flyer spread for ${banner} Page ${pageNumber}?`)) return;
+
+      try {
+        const res = await fetch(`/api/flyers/custom-page?banner=${encodeURIComponent(banner)}&page_number=${pageNumber}`, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          showToast(`Reverted ${banner} Page ${pageNumber} to default.`);
+          await loadCustomFlyerPages();
+          renderPhysicalCircularPage();
+        }
+      } catch (err) {
+        console.error("Delete custom page error:", err);
+      }
+    }
+
+    
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        switchMainView('optimizer');
+        switchInputTab('search');
+        document.getElementById('omniInput')?.focus();
+      } else if (e.key === 'Escape') {
+        const storeModal = document.getElementById('nearbyStoresModal');
+        if (storeModal && !storeModal.classList.contains('hidden')) toggleNearbyStoresModal();
+        const flyerModal = document.getElementById('uploadFlyerModal');
+        if (flyerModal && !flyerModal.classList.contains('hidden')) closeUploadFlyerModal();
+      }
+    });
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      loadSample('butterChicken');
+      await loadCustomFlyerPages();
+      await loadAllFlyerDeals();
+    });
+  </script>
+
+  <!-- UPLOAD FLYER PAGE MODAL -->
+  <div id="uploadFlyerModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white text-black w-full max-w-lg rounded-3xl border border-[#D4D4D8] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div class="p-6 border-b border-[#D4D4D8] flex justify-between items-center">
+        <div>
+          <h3 class="text-lg font-extrabold text-black flex items-center gap-2">
+            <i class="fa-solid fa-cloud-arrow-up text-[#1A1A1A]"></i> Upload Real Flyer Page
+          </h3>
+          <p class="text-xs text-[#525252] mt-0.5">Upload scanned or digital flyer publication pages for your stores</p>
+        </div>
+        <button onclick="closeUploadFlyerModal()" class="w-8 h-8 rounded-full bg-[#E7E7E7] hover:bg-[#D4D4D8] flex items-center justify-center text-[#525252] hover:text-black">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="p-6 space-y-4">
+        <!-- Store Selector -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-black uppercase mb-1">Supermarket:</label>
+            <select id="uploadStoreSelect" class="w-full bg-[#F7F7F8] border border-[#D4D4D8] rounded-xl px-3 py-2 text-xs font-bold text-black focus:outline-none focus:border-black">
+              <option value="No Frills">No Frills</option>
+              <option value="Walmart">Walmart</option>
+              <option value="Superstore">Superstore</option>
+              <option value="Safeway">Safeway</option>
+              <option value="Save-On-Foods">Save-On-Foods</option>
+              <option value="Costco">Costco</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-black uppercase mb-1">Page Number:</label>
+            <select id="uploadPageSelect" class="w-full bg-[#F7F7F8] border border-[#D4D4D8] rounded-xl px-3 py-2 text-xs font-bold text-black focus:outline-none focus:border-black">
+              <option value="1">Page 1 (Front Page)</option>
+              <option value="2">Page 2 (Meat & Seafood)</option>
+              <option value="3">Page 3 (Produce)</option>
+              <option value="4">Page 4 (Dairy & Eggs)</option>
+              <option value="5">Page 5 (Pantry & Canned)</option>
+              <option value="6">Page 6 (Bakery & Snacks)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- File Upload Box -->
+        <div>
+          <label class="block text-xs font-bold text-black uppercase mb-1">Flyer Image (PNG/JPG/WebP):</label>
+          <div id="dropZone" class="border-2 border-dashed border-[#D4D4D8] hover:border-black rounded-2xl p-6 text-center cursor-pointer bg-[#F7F7F8] transition" onclick="document.getElementById('flyerFileInput').click()">
+            <input type="file" id="flyerFileInput" accept="image/*" class="hidden" onchange="handleFlyerFileSelect(this)">
+            <div id="uploadPrompt" class="space-y-1.5">
+              <div class="w-10 h-10 rounded-full bg-white border border-[#D4D4D8] mx-auto flex items-center justify-center text-sm text-black">
+                <i class="fa-solid fa-file-image"></i>
+              </div>
+              <div class="text-xs font-bold text-black">Click or drag & drop flyer page image</div>
+              <div class="text-[11px] text-[#71717A]">Supports scanned pages, screenshots, or official digital flyer sheets</div>
+            </div>
+            <!-- Preview -->
+            <div id="previewContainer" class="hidden space-y-2">
+              <img id="imagePreview" src="" class="max-h-48 mx-auto rounded-xl border border-[#D4D4D8] shadow-sm object-contain" />
+              <div id="previewFileName" class="text-xs font-bold text-black"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4 bg-[#F7F7F8] border-t border-[#D4D4D8] flex justify-between items-center">
+        <button onclick="closeUploadFlyerModal()" class="px-4 py-2 bg-white border border-[#D4D4D8] hover:bg-[#EAEAEA] text-[#525252] text-xs font-bold rounded-full">
+          Cancel
+        </button>
+        <button id="btnSubmitUpload" onclick="submitFlyerUpload()" class="px-6 py-2 bg-[#1A1A1A] hover:bg-black text-white text-xs font-bold rounded-full shadow-sm flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-check"></i> Set Flyer Page
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- MOBILE BOTTOM APP DOCK -->
+  <nav id="mobileBottomNav" class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#D4D4D8] py-2 px-3 flex justify-around items-center shadow-lg">
+    <button onclick="switchMainView('optimizer'); scrollToTopStage();" id="mobNavOptimizer" class="flex flex-col items-center gap-1 text-[10px] font-bold text-black py-1 px-3 rounded-xl transition">
+      <i class="fa-solid fa-calculator text-base"></i>
+      <span>Optimizer</span>
+    </button>
+    <button onclick="switchMainView('flyers'); scrollToTopStage();" id="mobNavFlyers" class="flex flex-col items-center gap-1 text-[10px] font-bold text-[#71717A] py-1 px-3 rounded-xl transition">
+      <i class="fa-solid fa-newspaper text-base"></i>
+      <span>Flyers</span>
+    </button>
+    <button onclick="toggleNearbyStoresModal()" class="flex flex-col items-center gap-1 text-[10px] font-bold text-[#71717A] py-1 px-3 rounded-xl transition">
+      <i class="fa-solid fa-store text-base"></i>
+      <span>22 Stores</span>
+    </button>
+    <button onclick="scrollToBasket()" class="relative flex flex-col items-center gap-1 text-[10px] font-bold text-[#71717A] py-1 px-3 rounded-xl transition">
+      <div class="relative">
+        <i class="fa-solid fa-cart-shopping text-base"></i>
+        <span id="mobileCartCount" class="absolute -top-1.5 -right-2.5 w-4 h-4 rounded-full bg-[#1A1A1A] text-white text-[9px] font-black flex items-center justify-center">0</span>
+      </div>
+      <span>Basket</span>
+    </button>
+  </nav>
+
+  <!-- FLOATING QUICK-CART BAR -->
+  <div id="floatingCartBar" class="fixed bottom-16 md:bottom-6 right-4 sm:right-8 z-30 hidden animate-in fade-in slide-in-from-bottom-3 duration-200">
+    <button onclick="scrollToBasketAndOptimize()" class="bg-[#1A1A1A] hover:bg-black text-white text-xs font-bold px-4 py-3 rounded-full shadow-2xl flex items-center gap-3 border border-white/20 transition-all hover:scale-105 active:scale-95">
+      <span class="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-black shadow-xs" id="floatingCartBadge">0</span>
+      <span id="floatingCartText" class="font-extrabold tracking-tight">Cart · Ready to Optimize</span>
+      <span class="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[10px]">
+        <i class="fa-solid fa-arrow-down"></i>
+      </span>
+    </button>
+  </div>
+
+</body>
+</html>
