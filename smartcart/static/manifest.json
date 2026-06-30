@@ -1,0 +1,15 @@
+{
+  "name": "SmartCart: Algorithmic Grocery Deals & Route Optimizer",
+  "short_name": "SmartCart",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#0F172A",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3737/3737372.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
