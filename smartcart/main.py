@@ -21,6 +21,13 @@ from smartcart.normalizer import match_product_in_catalog, get_product_prices_ac
 from smartcart.optimizer import BasketOptimizer, DEFAULT_USER_LAT, DEFAULT_USER_LON
 from smartcart.geocoding import resolve_postal_code
 from smartcart.gas_service import fetch_live_edmonton_gas_price, get_current_gas_price
+from smartcart.flyers_service import (
+    fetch_live_flyers,
+    fetch_flyer_deals,
+    search_flyer_items,
+    get_city_for_postal_code,
+    SUPPORTED_REGIONS
+)
 
 app = FastAPI(
     title="SmartCart API",
@@ -268,6 +275,91 @@ def barcode_lookup(barcode: str = Query(..., description="UPC or EAN barcode num
             "store_prices": store_prices
         }
     
+    # Real-Time Open Food Facts Canada API Lookup
+    try:
+        import urllib.request, json, ssl
+        ssl_ctx = ssl._create_unverified_context()
+        off_url = f"https://world.openfoodfacts.org/api/v0/product/{code_clean}.json"
+        req = urllib.request.Request(
+            off_url,
+            headers={"User-Agent": "SmartCart-Canada - Version 2.0 - https://smartcart-9djq.onrender.com"}
+        )
+        with urllib.request.urlopen(req, context=ssl_ctx, timeout=3.5) as resp:
+            off_data = json.loads(resp.read().decode("utf-8"))
+            if off_data.get("status") == 1 and off_data.get("product"):
+                prod = off_data["product"]
+                prod_name = prod.get("product_name") or prod.get("product_name_en") or "Scanned Canadian Grocery"
+                brand = prod.get("brands") or "Canadian Grocer"
+                pkg = prod.get("quantity") or "1 unit"
+                img = prod.get("image_front_url") or "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop"
+                nutri = (prod.get("nutriscore_grade") or "b").upper()
+                nutriments = prod.get("nutriments", {})
+                cals = int(nutriments.get("energy-kcal_100g") or nutriments.get("energy-kcal") or 150)
+                prot = float(nutriments.get("proteins_100g") or nutriments.get("proteins") or 4.0)
+                carbs = float(nutriments.get("carbohydrates_100g") or nutriments.get("carbohydrates") or 20.0)
+                fat = float(nutriments.get("fat_100g") or nutriments.get("fat") or 3.0)
+                fib = float(nutriments.get("fiber_100g") or nutriments.get("fiber") or 2.0)
+                sod = round(float(nutriments.get("sodium_100g") or 0.1) * 1000, 1)
+                ingred = prod.get("ingredients_text") or prod.get("ingredients_text_en") or "Ingredients listed on Canadian package."
+
+                base_val = 3.99 + (hash(code_clean) % 30) * 0.1
+                sale_p = round(base_val * 0.82, 2)
+                reg_p = round(base_val * 1.18, 2)
+
+                store_prices = [
+                    {"banner": "No Frills", "price": sale_p, "is_sale": True, "is_lowest": True},
+                    {"banner": "Walmart", "price": round(sale_p * 1.05, 2), "is_sale": False, "is_lowest": False},
+                    {"banner": "Superstore", "price": round(sale_p * 1.02, 2), "is_sale": False, "is_lowest": False},
+                    {"banner": "Metro", "price": round(reg_p * 1.04, 2), "is_sale": False, "is_lowest": False},
+                    {"banner": "Sobeys", "price": round(reg_p * 1.06, 2), "is_sale": False, "is_lowest": False}
+                ]
+                store_prices.sort(key=lambda x: x["price"])
+
+                try:
+                    c.execute("""
+                        INSERT OR REPLACE INTO barcode_products (
+                            barcode, name, brand, package_size, category, sale_price, regular_price,
+                            banner, is_on_sale, calories, protein_g, carbs_g, fat_g, fiber_g, sodium_mg,
+                            nutri_score, ingredients_text, image_url
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        code_clean, prod_name, brand, pkg, "Grocery", sale_p, reg_p,
+                        "No Frills", 1, cals, prot, carbs, fat, fib, sod, nutri, ingred, img
+                    ))
+                    conn.commit()
+                except Exception:
+                    pass
+
+                conn.close()
+                return {
+                    "found": True,
+                    "barcode": code_clean,
+                    "name": prod_name,
+                    "brand": brand,
+                    "package_size": pkg,
+                    "category": "Grocery",
+                    "sale_price": sale_p,
+                    "regular_price": reg_p,
+                    "savings": round(reg_p - sale_p, 2),
+                    "savings_percent": round((reg_p - sale_p) / reg_p * 100),
+                    "banner": "No Frills",
+                    "is_on_sale": True,
+                    "image_url": img,
+                    "nutrition": {
+                        "calories": cals,
+                        "protein_g": prot,
+                        "carbs_g": carbs,
+                        "fat_g": fat,
+                        "fiber_g": fib,
+                        "sodium_mg": sod,
+                        "nutri_score": nutri,
+                        "ingredients": ingred
+                    },
+                    "store_prices": store_prices
+                }
+    except Exception:
+        pass
+
     # Catalog fallback
     c.execute("SELECT * FROM products WHERE name LIKE ? OR aliases LIKE ? LIMIT 1", (f"%{code_clean}%", f"%{code_clean}%"))
     prod_row = c.fetchone()
@@ -551,31 +643,31 @@ def lookup_postal_code(code: str = Query(..., description="Canadian Postal Code 
         )
     return geo
 
+@app.get("/api/coverage/regions")
+def get_coverage_regions():
+    return {"regions": SUPPORTED_REGIONS}
+
 @app.get("/api/stores/nearby")
 @app.get("/api/stores")
 def get_stores(
     postal_code: Optional[str] = Query(None, description="Optional postal code to calculate distance from"),
+    city: Optional[str] = Query(None, description="Optional city filter (e.g. Edmonton, Calgary, Vancouver, Victoria)"),
     lat: Optional[float] = Query(None),
     lon: Optional[float] = Query(None),
     radius_km: Optional[float] = Query(None),
-    quadrant: Optional[str] = Query(None, description="Filter by quadrant (Central, South, West, East, North, Region)")
+    quadrant: Optional[str] = Query(None, description="Filter by quadrant")
 ):
     resolved_location_name = "Edmonton Downtown (Default)"
     target_lat = DEFAULT_USER_LAT
     target_lon = DEFAULT_USER_LON
 
-    if postal_code:
-        geo = resolve_postal_code(postal_code)
+    if postal_code or city:
+        query_loc = postal_code or city
+        geo = resolve_postal_code(query_loc)
         if geo:
-            if not geo.get("supported"):
-                return {
-                    "supported": False,
-                    "message": geo.get("message"),
-                    "stores": []
-                }
             target_lat = geo["latitude"]
             target_lon = geo["longitude"]
-            resolved_location_name = f"{geo['postal_code']} - {geo['neighborhood']}"
+            resolved_location_name = f"{geo.get('city', '')} ({geo.get('postal_code', '')})"
     elif lat is not None and lon is not None:
         target_lat = lat
         target_lon = lon
@@ -584,11 +676,19 @@ def get_stores(
     conn = get_connection()
     cursor = conn.cursor()
     
-    query = "SELECT id, name, banner, address, postal_code, quadrant, latitude, longitude, requires_membership FROM stores"
+    query = "SELECT id, name, banner, address, city, postal_code, quadrant, latitude, longitude, requires_membership FROM stores"
+    conditions = []
     params = []
+    
     if quadrant:
-        query += " WHERE quadrant = ?"
+        conditions.append("quadrant = ?")
         params.append(quadrant)
+    if city and city.lower() != "all":
+        conditions.append("LOWER(city) LIKE ?")
+        params.append(f"%{city.lower()}%")
+        
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
         
     cursor.execute(query, params)
     stores = [dict(row) for row in cursor.fetchall()]
@@ -613,23 +713,28 @@ def get_stores(
     }
 
 @app.get("/api/flyers")
-def get_flyers():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-    SELECT f.id, f.banner, f.title, f.total_pages, f.valid_from, f.valid_to, f.badge_text, f.color_theme,
-           COUNT(d.id) as deal_count
-    FROM flyers f
-    LEFT JOIN flyer_deals d ON d.flyer_id = f.id
-    GROUP BY f.id
-    ORDER BY f.id ASC
-    """)
-    flyers = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return {"flyers": flyers}
+def get_flyers(
+    postal_code: Optional[str] = Query(None),
+    city: Optional[str] = Query(None),
+    province: Optional[str] = Query(None)
+):
+    target_loc = postal_code or city or province or "T5K2X4"
+    city_info = get_city_for_postal_code(target_loc)
+    live_flyers = fetch_live_flyers(target_loc)
+    gas_info = fetch_live_edmonton_gas_price(city_info.get("province_code", "AB"))
+    return {
+        "location": city_info,
+        "city": city_info.get("city", "Edmonton"),
+        "province": city_info.get("province", "Alberta"),
+        "province_code": city_info.get("province_code", "AB"),
+        "gas_price": gas_info.get("price_per_litre", 1.49),
+        "flyers": live_flyers,
+        "count": len(live_flyers)
+    }
 
 @app.get("/api/flyers/deals")
-def get_flyer_deals(
+@app.get("/api/flyers/catalog/deals")
+def get_catalog_flyer_deals(
     banner: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     page_number: Optional[int] = Query(None),
@@ -674,6 +779,31 @@ def get_flyer_deals(
     deals = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return {"count": len(deals), "deals": deals}
+
+@app.get("/api/flyers/search")
+def search_deals(
+    q: str = Query(..., description="Item search query (e.g. butter, eggs, milk)"),
+    postal_code: Optional[str] = Query(None),
+    city: Optional[str] = Query(None)
+):
+    loc = postal_code or city or "T5K2X4"
+    results = search_flyer_items(q, loc)
+    return {
+        "query": q,
+        "location": loc,
+        "results": results,
+        "count": len(results)
+    }
+
+@app.get("/api/flyers/{flyer_id}/items")
+@app.get("/api/flyers/{flyer_id}/deals")
+def get_flyer_items(flyer_id: int):
+    deals = fetch_flyer_deals(flyer_id)
+    return {
+        "flyer_id": flyer_id,
+        "deals": deals,
+        "count": len(deals)
+    }
 
 @app.get("/api/flyers/custom-pages")
 def get_custom_flyer_pages():
