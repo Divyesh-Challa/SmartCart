@@ -108,8 +108,8 @@ class TestGeocodingAndLocation(unittest.TestCase):
 
         res_bc = resolve_postal_code("V6B 1A1")
         self.assertIsNotNone(res_bc)
-        self.assertFalse(res_bc["supported"])
-        self.assertIn("British Columbia", res_bc["message"])
+        self.assertTrue(res_bc["supported"])
+        self.assertEqual(res_bc["province"], "British Columbia")
 
 class TestFlyersAndDeals(unittest.TestCase):
     @classmethod
@@ -154,6 +154,79 @@ class TestFlyersAndDeals(unittest.TestCase):
         self.assertIn("price_per_litre", data)
         self.assertEqual(data["city"], "Edmonton")
         self.assertGreater(data["price_per_litre"], 0.5)
+
+
+    def test_dinner_deals_endpoints(self):
+        res = self.client.get("/api/recipes/dinner-deals")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertGreaterEqual(data["count"], 5)
+        first = data["recipes"][0]
+        self.assertIn("cost_per_serving", first)
+        self.assertIn("ingredients", first)
+
+        res_single = self.client.get(f"/api/recipes/dinner-deals/{first['id']}")
+        self.assertEqual(res_single.status_code, 200)
+        self.assertEqual(res_single.json()["id"], first["id"])
+
+    def test_coverage_and_ticker_endpoints(self):
+        res_cov = self.client.get("/api/coverage/stats")
+        self.assertEqual(res_cov.status_code, 200)
+        self.assertGreaterEqual(res_cov.json()["total_stores_tracked"], 2000)
+
+        res_tick = self.client.get("/api/deals/top-ticker")
+        self.assertEqual(res_tick.status_code, 200)
+        self.assertGreaterEqual(len(res_tick.json()["deals"]), 5)
+
+    def test_barcode_lookup_and_samples(self):
+        res_samples = self.client.get("/api/barcodes/samples")
+        self.assertEqual(res_samples.status_code, 200)
+        samples = res_samples.json()["samples"]
+        self.assertGreaterEqual(len(samples), 5)
+
+        # Look up the Italpasta Fusilli barcode
+        res_code = self.client.get("/api/barcode/lookup?barcode=068113112345")
+        self.assertEqual(res_code.status_code, 200)
+        data = res_code.json()
+        self.assertTrue(data["found"])
+        self.assertEqual(data["name"], "Italpasta Fusilli Pasta")
+        self.assertIn("nutrition", data)
+        self.assertIn("store_prices", data)
+
+    def test_savings_summary_and_receipts(self):
+        res_sum = self.client.get("/api/savings/summary")
+        self.assertEqual(res_sum.status_code, 200)
+        summary = res_sum.json()
+        self.assertGreater(summary["total_saved"], 0)
+        self.assertGreater(summary["trips_count"], 0)
+
+        res_receipts = self.client.get("/api/savings/receipts")
+        self.assertEqual(res_receipts.status_code, 200)
+        self.assertGreaterEqual(len(res_receipts.json()["receipts"]), 1)
+
+    def test_sale_alerts(self):
+        res_alerts = self.client.get("/api/alerts")
+        self.assertEqual(res_alerts.status_code, 200)
+        alerts = res_alerts.json()["alerts"]
+        self.assertGreaterEqual(len(alerts), 1)
+
+    def test_regional_coverage_and_flyers(self):
+        res_reg = self.client.get("/api/coverage/regions")
+        self.assertEqual(res_reg.status_code, 200)
+        data = res_reg.json()
+        self.assertIn("Alberta", data["regions"])
+        self.assertIn("British Columbia", data["regions"])
+
+        # Test Calgary flyers
+        res_calgary = self.client.get("/api/flyers?city=Calgary")
+        self.assertEqual(res_calgary.status_code, 200)
+        flyers = res_calgary.json()["flyers"]
+        self.assertGreaterEqual(len(flyers), 5)
+
+        # Test Vancouver flyers
+        res_van = self.client.get("/api/flyers?city=Vancouver")
+        self.assertEqual(res_van.status_code, 200)
+        self.assertGreaterEqual(len(res_van.json()["flyers"]), 5)
 
 if __name__ == "__main__":
     unittest.main()
