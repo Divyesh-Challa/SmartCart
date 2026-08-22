@@ -243,5 +243,100 @@ class TestFlyersAndDeals(unittest.TestCase):
         self.assertEqual(ref_data["status"], "SUCCESS")
         self.assertEqual(ref_data["stores_count"], 3524)
 
+class TestSmartCartEnhancementsTDD(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        init_db()
+        seed_edmonton_data()
+        cls.client = TestClient(app)
+
+    def test_barcode_normalization_logic(self):
+        from smartcart.normalizer import normalize_barcode
+        # 12-digit standard UPC-A
+        self.assertEqual(normalize_barcode("068700011078"), "068700011078")
+        # 13-digit EAN-13 starting with zero (padded UPC-A) -> stripped to 12 digits
+        self.assertEqual(normalize_barcode("0068700011078"), "068700011078")
+        # Input with spaces and dashes
+        self.assertEqual(normalize_barcode(" 068700-011078 "), "068700011078")
+        # Standard 13-digit European EAN-13 not starting with 0
+        self.assertEqual(normalize_barcode("8001234567890"), "8001234567890")
+
+    def test_flyer_deals_structured_columns(self):
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("PRAGMA table_info(flyer_deals)")
+        columns = {row["name"] for row in c.fetchall()}
+        conn.close()
+        required_cols = {"store_name", "title", "sale_price", "unit_size", "valid_until", "category"}
+        self.assertTrue(required_cols.issubset(columns), f"Missing columns in flyer_deals: {required_cols - columns}")
+
+    def test_barcode_resolve_api_v1(self):
+        # Resolve sample barcode (Italpasta Fusilli 068113112345)
+        res = self.client.get("/api/v1/barcodes/resolve/068113112345")
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertIn("data", body)
+        data = body["data"]
+        self.assertTrue(data.get("found", True))
+        self.assertEqual(data["name"], "Italpasta Fusilli Pasta")
+        self.assertIn("brand", data)
+        self.assertIn("package_size", data)
+        self.assertIn("nutrition", data)
+        self.assertIn("store_prices", data)
+        self.assertGreaterEqual(len(data["store_prices"]), 1)
+
+    def test_flyer_grounded_recipes_api_v1(self):
+        res = self.client.get("/api/v1/recipes/flyer-grounded?city=Edmonton")
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertIn("data", body)
+        recipes = body["data"]
+        self.assertGreaterEqual(len(recipes), 1)
+        
+        recipe = recipes[0]
+        self.assertIn("title", recipe)
+        self.assertIn("total_sale_cost", recipe)
+        self.assertIn("total_regular_cost", recipe)
+        self.assertIn("total_savings", recipe)
+        self.assertIn("ingredients", recipe)
+        
+        # At least one ingredient must be annotated as on sale with store metadata
+        has_sale_ing = any(ing.get("is_on_sale") and ing.get("store_name") for ing in recipe["ingredients"])
+        self.assertTrue(has_sale_ing, "Recipe must annotate ingredients on sale with store_name")
+
+    def test_multi_store_compare_search_api_v1(self):
+        res = self.client.get("/api/v1/search/compare?q=chicken&city=Edmonton")
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertIn("data", body)
+        items = body["data"]
+        self.assertGreaterEqual(len(items), 1)
+
+        first_group = items[0]
+        self.assertIn("name", first_group)
+        self.assertIn("stores", first_group)
+        self.assertGreaterEqual(len(first_group["stores"]), 1)
+        
+        first_store = first_group["stores"][0]
+        self.assertIn("store_name", first_store)
+        self.assertIn("banner", first_store)
+        self.assertIn("price", first_store)
+        self.assertIn("unit_price_display", first_store)
+        self.assertIn("is_lowest", first_store)
+
+    def test_barcode_resolve_invalid_format(self):
+        # Non-alphanumeric barcode yields 400
+        res = self.client.get("/api/v1/barcodes/resolve/---")
+        self.assertEqual(res.status_code, 400)
+
+    def test_multi_store_compare_search_staples(self):
+        # Search for oats or milk
+        res = self.client.get("/api/v1/search/compare?q=milk&city=Calgary")
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertIn("data", body)
+        self.assertGreaterEqual(len(body["data"]), 1)
+
 if __name__ == "__main__":
     unittest.main()
+

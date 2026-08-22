@@ -18,7 +18,7 @@ import asyncio
 
 from smartcart.database import init_db, seed_edmonton_data, get_connection, haversine_distance_km
 from smartcart.parser import parse_recipe_text, parse_ingredient_line
-from smartcart.normalizer import match_product_in_catalog, get_product_prices_across_stores
+from smartcart.normalizer import match_product_in_catalog, get_product_prices_across_stores, normalize_barcode
 from smartcart.optimizer import BasketOptimizer, DEFAULT_USER_LAT, DEFAULT_USER_LON
 from smartcart.geocoding import resolve_postal_code
 from smartcart.gas_service import fetch_live_edmonton_gas_price, get_current_gas_price
@@ -180,6 +180,105 @@ def get_single_dinner_deal(recipe_id: int):
     conn.close()
     return recipe
 
+@app.get("/api/v1/recipes/flyer-grounded")
+def get_flyer_grounded_recipes(
+    city: Optional[str] = Query("Edmonton"),
+    province: Optional[str] = Query("AB"),
+    category: Optional[str] = Query(None),
+    limit: Optional[int] = Query(8)
+):
+    conn = get_connection()
+    c = conn.cursor()
+
+    # 1. Fetch available recipes
+    query = "SELECT * FROM flyer_recipes WHERE 1=1"
+    params = []
+    if category and category.lower() != "all":
+        query += " AND LOWER(category) = ?"
+        params.append(category.lower())
+    query += " ORDER BY savings_amount DESC LIMIT ?"
+    params.append(limit or 8)
+
+    c.execute(query, params)
+    recipes = [dict(row) for row in c.fetchall()]
+
+    # 2. Fetch active flyer deals for cross-referencing
+    c.execute("""
+        SELECT d.id, d.title, d.category, d.sale_price, d.original_price, d.store_name, d.unit_size, d.valid_until, f.banner
+        FROM flyer_deals d
+        JOIN flyers f ON f.id = d.flyer_id
+    """)
+    all_deals = [dict(d) for d in c.fetchall()]
+
+    for r in recipes:
+        if r.get("instructions_json"):
+            try:
+                import json
+                r["instructions"] = json.loads(r["instructions_json"])
+            except Exception:
+                r["instructions"] = []
+        else:
+            r["instructions"] = []
+
+        c.execute("""
+            SELECT name, brand, package_size, category, sale_price, regular_price, savings, quantity, unit
+            FROM flyer_recipe_ingredients
+            WHERE recipe_id = ?
+            ORDER BY id ASC
+        """, (r["id"],))
+        ingredients = [dict(ing) for ing in c.fetchall()]
+
+        # Cross-reference with flyer deals
+        total_sale = 0.0
+        total_reg = 0.0
+        for ing in ingredients:
+            ing_name = ing["name"].lower()
+            matched_deal = None
+            for deal in all_deals:
+                deal_title = deal["title"].lower()
+                deal_words = set(re.findall(r'\b\w+\b', deal_title))
+                ing_words = set(re.findall(r'\b\w+\b', ing_name))
+                if ing_name in deal_title or deal_title in ing_name or len(deal_words & ing_words) >= 2:
+                    matched_deal = deal
+                    break
+
+            qty = ing.get("quantity") or 1.0
+            if matched_deal:
+                ing["is_on_sale"] = True
+                ing["store_name"] = matched_deal.get("store_name") or matched_deal.get("banner") or r["banner"]
+                ing["sale_price"] = matched_deal["sale_price"]
+                ing["regular_price"] = matched_deal["original_price"] or round(matched_deal["sale_price"] * 1.35, 2)
+                ing["savings"] = round(ing["regular_price"] - ing["sale_price"], 2)
+                ing["flyer_deal_id"] = matched_deal["id"]
+                ing["valid_until"] = matched_deal.get("valid_until")
+            else:
+                is_sale = ing.get("savings", 0) > 0
+                ing["is_on_sale"] = is_sale
+                ing["store_name"] = r["banner"]
+                ing["flyer_deal_id"] = None
+
+            total_sale += ing["sale_price"] * qty
+            total_reg += ing["regular_price"] * qty
+
+        r["ingredients"] = ingredients
+        r["total_sale_cost"] = round(total_sale, 2)
+        r["total_regular_cost"] = round(total_reg, 2)
+        r["total_savings"] = round(max(0.0, total_reg - total_sale), 2)
+        servings = r.get("servings") or 4
+        r["cost_per_serving"] = round(total_sale / servings, 2)
+        r["sale_ingredients_count"] = sum(1 for ing in ingredients if ing.get("is_on_sale"))
+        r["total_ingredients_count"] = len(ingredients)
+
+    conn.close()
+    return {
+        "data": recipes,
+        "meta": {
+            "total_recipes": len(recipes),
+            "region": f"{city}, {province or 'Canada'}",
+            "flyer_cycle": "Active Weekly Circulars"
+        }
+    }
+
 @app.post("/api/recipes/request")
 def submit_recipe_request(req: RecipeRequestModel):
     conn = get_connection()
@@ -229,81 +328,121 @@ def get_coverage_stats():
         ]
     }
 
-@app.get("/api/barcode/lookup")
-def barcode_lookup(barcode: str = Query(..., description="UPC or EAN barcode number")):
-    code_clean = barcode.strip()
+def resolve_barcode_item(barcode: str) -> Dict[str, Any]:
+    code_clean = normalize_barcode(barcode)
+    if not code_clean:
+        raise HTTPException(status_code=400, detail="Invalid barcode format.")
+
     conn = get_connection()
     c = conn.cursor()
-    c.execute("SELECT * FROM barcode_products WHERE barcode = ?", (code_clean,))
+    # Check both code_clean and 0-padded variant
+    c.execute("SELECT * FROM barcode_products WHERE barcode = ? OR barcode = ?", (code_clean, "0" + code_clean if len(code_clean) == 12 else code_clean))
     row = c.fetchone()
-    
+
     if row:
         p = dict(row)
-        base = p["regular_price"] or p["sale_price"]
-        other_chains = ["No Frills", "Walmart", "Superstore", "Metro", "Sobeys", "Safeway"]
-        store_prices = [
-            {"banner": p["banner"], "price": p["sale_price"], "is_sale": bool(p["is_on_sale"]), "is_lowest": True}
-        ]
-        for b in other_chains:
-            if b != p["banner"]:
-                mult = 1.08 if b in ["Metro", "Sobeys"] else (0.95 if b == "No Frills" else 1.0)
-                sim_price = round(base * mult, 2)
+        # Option B: Pull real store prices from inventory matching the product name
+        c.execute("""
+            SELECT si.price, s.name as store_name, s.banner
+            FROM store_inventory si
+            JOIN stores s ON s.id = si.store_id
+            JOIN products pr ON pr.id = si.product_id
+            WHERE LOWER(pr.name) LIKE ?
+        """, (f"%{p['name'].lower()[:15]}%",))
+        real_inv = [dict(r) for r in c.fetchall()]
+
+        store_prices = []
+        seen_banners = set()
+        for inv in real_inv:
+            b = inv["banner"]
+            if b not in seen_banners:
+                seen_banners.add(b)
                 store_prices.append({
                     "banner": b,
-                    "price": sim_price,
+                    "store_name": inv["store_name"],
+                    "price": inv["price"],
                     "is_sale": False,
                     "is_lowest": False
                 })
+
+        primary_banner = p["banner"] or "No Frills"
+        if primary_banner not in seen_banners:
+            store_prices.append({
+                "banner": primary_banner,
+                "store_name": f"{primary_banner} Supermarket",
+                "price": p["sale_price"],
+                "is_sale": bool(p["is_on_sale"]),
+                "is_lowest": False
+            })
+        else:
+            for sp in store_prices:
+                if sp["banner"] == primary_banner and p["sale_price"] < sp["price"]:
+                    sp["price"] = p["sale_price"]
+                    sp["is_sale"] = bool(p["is_on_sale"])
+
+        if not store_prices:
+            store_prices = [{
+                "banner": primary_banner,
+                "store_name": f"{primary_banner} Supermarket",
+                "price": p["sale_price"],
+                "is_sale": bool(p["is_on_sale"]),
+                "is_lowest": True
+            }]
+
         store_prices.sort(key=lambda x: x["price"])
         min_p = store_prices[0]["price"]
         for sp in store_prices:
             sp["is_lowest"] = (sp["price"] == min_p)
 
         conn.close()
+        reg_p = p["regular_price"] or round(p["sale_price"] * 1.25, 2)
+        sale_p = p["sale_price"]
         return {
             "found": True,
             "barcode": code_clean,
             "name": p["name"],
-            "brand": p["brand"],
-            "package_size": p["package_size"],
-            "category": p["category"],
-            "sale_price": p["sale_price"],
-            "regular_price": p["regular_price"],
-            "savings": round(p["regular_price"] - p["sale_price"], 2),
-            "savings_percent": round((p["regular_price"] - p["sale_price"]) / p["regular_price"] * 100) if p["regular_price"] else 0,
-            "banner": p["banner"],
+            "brand": p["brand"] or "Canadian Grocer",
+            "package_size": p["package_size"] or "1 unit",
+            "category": p["category"] or "Grocery",
+            "sale_price": sale_p,
+            "regular_price": reg_p,
+            "savings": round(reg_p - sale_p, 2),
+            "savings_percent": round((reg_p - sale_p) / reg_p * 100) if reg_p else 0,
+            "banner": p["banner"] or "No Frills",
+            "best_store": store_prices[0]["banner"],
+            "best_price": store_prices[0]["price"],
             "is_on_sale": bool(p["is_on_sale"]),
-            "image_url": p["image_url"],
+            "image_url": p["image_url"] or "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop",
             "nutrition": {
-                "calories": p["calories"],
-                "protein_g": p["protein_g"],
-                "carbs_g": p["carbs_g"],
-                "fat_g": p["fat_g"],
-                "fiber_g": p["fiber_g"],
-                "sodium_mg": p["sodium_mg"],
-                "nutri_score": p["nutri_score"],
-                "ingredients": p["ingredients_text"]
+                "calories": p["calories"] or 150,
+                "protein_g": p["protein_g"] or 4.0,
+                "carbs_g": p["carbs_g"] or 20.0,
+                "fat_g": p["fat_g"] or 3.0,
+                "fiber_g": p["fiber_g"] or 2.0,
+                "sodium_mg": p["sodium_mg"] or 100.0,
+                "nutri_score": p["nutri_score"] or "B",
+                "ingredients": p["ingredients_text"] or "Natural Canadian ingredients."
             },
             "store_prices": store_prices
         }
-    
-    # Real-Time Open Food Facts Canada API Lookup
+
+    # 2. Real-Time Open Food Facts Canada API v2 Lookup (with v0 fallback)
     try:
         import urllib.request, json, ssl
         ssl_ctx = ssl._create_unverified_context()
-        off_url = f"https://world.openfoodfacts.org/api/v0/product/{code_clean}.json"
+        off_url = f"https://world.openfoodfacts.org/api/v2/product/{code_clean}.json"
         req = urllib.request.Request(
             off_url,
-            headers={"User-Agent": "SmartCart-Canada - Version 2.0 - https://smartcart-9djq.onrender.com"}
+            headers={"User-Agent": "SmartCart-Canada - Version 2.1 - https://smartcart-9djq.onrender.com"}
         )
         with urllib.request.urlopen(req, context=ssl_ctx, timeout=3.5) as resp:
             off_data = json.loads(resp.read().decode("utf-8"))
-            if off_data.get("status") == 1 and off_data.get("product"):
+            if off_data.get("status") in [1, "product found"] and off_data.get("product"):
                 prod = off_data["product"]
-                prod_name = prod.get("product_name") or prod.get("product_name_en") or "Scanned Canadian Grocery"
+                prod_name = prod.get("product_name") or prod.get("product_name_en") or f"Canadian Grocery Item ({code_clean})"
                 brand = prod.get("brands") or "Canadian Grocer"
                 pkg = prod.get("quantity") or "1 unit"
-                img = prod.get("image_front_url") or "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop"
+                img = prod.get("image_front_url") or prod.get("image_url") or "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop"
                 nutri = (prod.get("nutriscore_grade") or "b").upper()
                 nutriments = prod.get("nutriments", {})
                 cals = int(nutriments.get("energy-kcal_100g") or nutriments.get("energy-kcal") or 150)
@@ -314,18 +453,13 @@ def barcode_lookup(barcode: str = Query(..., description="UPC or EAN barcode num
                 sod = round(float(nutriments.get("sodium_100g") or 0.1) * 1000, 1)
                 ingred = prod.get("ingredients_text") or prod.get("ingredients_text_en") or "Ingredients listed on Canadian package."
 
-                base_val = 3.99 + (hash(code_clean) % 30) * 0.1
+                base_val = 3.99 + (abs(hash(code_clean)) % 30) * 0.1
                 sale_p = round(base_val * 0.82, 2)
                 reg_p = round(base_val * 1.18, 2)
 
                 store_prices = [
-                    {"banner": "No Frills", "price": sale_p, "is_sale": True, "is_lowest": True},
-                    {"banner": "Walmart", "price": round(sale_p * 1.05, 2), "is_sale": False, "is_lowest": False},
-                    {"banner": "Superstore", "price": round(sale_p * 1.02, 2), "is_sale": False, "is_lowest": False},
-                    {"banner": "Metro", "price": round(reg_p * 1.04, 2), "is_sale": False, "is_lowest": False},
-                    {"banner": "Sobeys", "price": round(reg_p * 1.06, 2), "is_sale": False, "is_lowest": False}
+                    {"banner": "Canadian Retail Index", "store_name": "Canadian Retail Index", "price": sale_p, "is_sale": False, "is_lowest": True}
                 ]
-                store_prices.sort(key=lambda x: x["price"])
 
                 try:
                     c.execute("""
@@ -355,6 +489,8 @@ def barcode_lookup(barcode: str = Query(..., description="UPC or EAN barcode num
                     "savings": round(reg_p - sale_p, 2),
                     "savings_percent": round((reg_p - sale_p) / reg_p * 100),
                     "banner": "No Frills",
+                    "best_store": store_prices[0]["banner"],
+                    "best_price": store_prices[0]["price"],
                     "is_on_sale": True,
                     "image_url": img,
                     "nutrition": {
@@ -372,43 +508,74 @@ def barcode_lookup(barcode: str = Query(..., description="UPC or EAN barcode num
     except Exception:
         pass
 
-    # Catalog fallback
+    # 3. Catalog fallback
     c.execute("SELECT * FROM products WHERE name LIKE ? OR aliases LIKE ? LIMIT 1", (f"%{code_clean}%", f"%{code_clean}%"))
     prod_row = c.fetchone()
-    conn.close()
-    
     if prod_row:
         pr = dict(prod_row)
-        return {
+        sale_p = 3.99
+        reg_p = 5.49
+        store_prices = [
+            {"banner": "No Frills", "price": 3.99, "is_sale": True, "is_lowest": True},
+            {"banner": "Walmart", "price": 4.47, "is_sale": False, "is_lowest": False},
+            {"banner": "Superstore", "price": 4.29, "is_sale": False, "is_lowest": False}
+        ]
+        res = {
             "found": True,
             "barcode": code_clean,
             "name": pr["name"],
             "brand": pr["brand"] or "Canadian Grocer",
             "package_size": f"{pr['package_quantity']} {pr['package_unit']}",
-            "category": pr["category"],
-            "sale_price": 3.99,
-            "regular_price": 5.49,
-            "savings": 1.50,
-            "savings_percent": 27,
+            "category": pr["category"] or "Grocery",
+            "sale_price": sale_p,
+            "regular_price": reg_p,
+            "savings": round(reg_p - sale_p, 2),
+            "savings_percent": round((reg_p - sale_p) / reg_p * 100),
             "banner": "No Frills",
+            "best_store": "No Frills",
+            "best_price": sale_p,
             "is_on_sale": True,
             "image_url": "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop",
             "nutrition": {
                 "calories": 140, "protein_g": 4.0, "carbs_g": 18.0, "fat_g": 2.0, "fiber_g": 2.0, "sodium_mg": 90.0,
                 "nutri_score": "B", "ingredients": "Natural Canadian grocery ingredients."
             },
-            "store_prices": [
-                {"banner": "No Frills", "price": 3.99, "is_sale": True, "is_lowest": True},
-                {"banner": "Walmart", "price": 4.47, "is_sale": False, "is_lowest": False},
-                {"banner": "Superstore", "price": 4.29, "is_sale": False, "is_lowest": False}
-            ]
+            "store_prices": store_prices
         }
+        try:
+            c.execute("""
+                INSERT OR REPLACE INTO barcode_products (
+                    barcode, name, brand, package_size, category, sale_price, regular_price,
+                    banner, is_on_sale, calories, protein_g, carbs_g, fat_g, fiber_g, sodium_mg,
+                    nutri_score, ingredients_text, image_url
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                code_clean, pr["name"], pr["brand"] or "Canadian Grocer", f"{pr['package_quantity']} {pr['package_unit']}",
+                pr["category"] or "Grocery", sale_p, reg_p, "No Frills", 1, 140, 4.0, 18.0, 2.0, 2.0, 90.0,
+                "B", "Natural Canadian grocery ingredients.", res["image_url"]
+            ))
+            conn.commit()
+        except Exception:
+            pass
+        conn.close()
+        return res
 
+    conn.close()
     return {
         "found": False,
         "barcode": code_clean,
         "message": f"Barcode {code_clean} not found in Canadian circular index. Try scanning one of the demo samples!"
     }
+
+@app.get("/api/v1/barcodes/resolve/{barcode}")
+def resolve_barcode_v1(barcode: str):
+    res = resolve_barcode_item(barcode)
+    return {"data": res, "meta": {"source": "cache" if res.get("found") else "not_found"}}
+
+@app.get("/api/barcode/lookup")
+def barcode_lookup(barcode: str = Query(..., description="UPC or EAN barcode number")):
+    return resolve_barcode_item(barcode)
+
 
 @app.get("/api/barcodes/samples")
 def get_sample_barcodes():
@@ -1019,6 +1186,161 @@ def compare_prices(req: ComparisonRequest):
             "item_name": match["name"],
             "prices": row_prices
         })
+    return {"matrix": matrix}
+
+@app.get("/api/v1/search/compare")
+def multi_store_price_comparison(
+    q: str = Query(..., description="Product query (e.g. chicken, oats, milk, butter)"),
+    city: Optional[str] = Query("Edmonton"),
+    province: Optional[str] = Query("AB")
+):
+    q_clean = q.strip().lower()
+    conn = get_connection()
+    c = conn.cursor()
+
+    # 1. Match products from catalog
+    c.execute("""
+        SELECT id, name, category, brand, package_quantity, package_unit, standard_unit_type
+        FROM products
+        WHERE LOWER(name) LIKE ? OR LOWER(aliases) LIKE ?
+        LIMIT 10
+    """, (f"%{q_clean}%", f"%{q_clean}%"))
+    products = [dict(r) for r in c.fetchall()]
+
+    if not products:
+        first_token = q_clean.split()[0] if q_clean else ""
+        if len(first_token) >= 3:
+            c.execute("""
+                SELECT id, name, category, brand, package_quantity, package_unit, standard_unit_type
+                FROM products
+                WHERE LOWER(name) LIKE ? OR LOWER(aliases) LIKE ?
+                LIMIT 10
+            """, (f"%{first_token}%", f"%{first_token}%"))
+            products = [dict(r) for r in c.fetchall()]
+
+    if not products:
+        c.execute("""
+            SELECT id, name, category, brand, package_quantity, package_unit, standard_unit_type
+            FROM products LIMIT 5
+        """)
+        products = [dict(r) for r in c.fetchall()]
+
+    # 2. Fetch active flyer deals for cross-referencing
+    c.execute("""
+        SELECT d.id, d.title, d.product_id, d.sale_price, d.original_price, d.discount_text, d.valid_until, d.store_name, f.banner
+        FROM flyer_deals d
+        JOIN flyers f ON f.id = d.flyer_id
+    """)
+    all_deals = [dict(d) for d in c.fetchall()]
+
+    target_banners = ["No Frills", "Real Canadian Superstore", "Walmart", "Save-On-Foods", "Safeway", "Sobeys"]
+
+    grouped_results = []
+    for prod in products:
+        p_id = prod["id"]
+        c.execute("""
+            SELECT si.price, s.id as store_id, s.name as store_name, s.banner
+            FROM store_inventory si
+            JOIN stores s ON s.id = si.store_id
+            WHERE si.product_id = ?
+        """, (p_id,))
+        inv_rows = [dict(r) for r in c.fetchall()]
+
+        deal_for_prod = {}
+        for d in all_deals:
+            if d.get("product_id") == p_id or prod["name"].lower() in d["title"].lower() or d["title"].lower() in prod["name"].lower():
+                b = d.get("store_name") or d.get("banner")
+                if b and b not in deal_for_prod:
+                    deal_for_prod[b] = d
+
+        banner_stores = {}
+        for inv in inv_rows:
+            b = inv["banner"]
+            if b not in banner_stores or inv["price"] < banner_stores[b]["price"]:
+                banner_stores[b] = inv
+
+        # Option B: Include only real store inventory and active flyer circulars
+        for b, deal in deal_for_prod.items():
+            if b not in banner_stores and deal.get("sale_price"):
+                banner_stores[b] = {
+                    "store_id": deal.get("id", 0),
+                    "store_name": deal.get("store_name") or f"{b} {city or ''}".strip(),
+                    "banner": b,
+                    "price": deal["sale_price"]
+                }
+
+        stores_list = []
+        pkg_qty = prod["package_quantity"] or 1.0
+        pkg_unit = prod["package_unit"] or "unit"
+
+        for b, st in banner_stores.items():
+            price = st["price"]
+            deal = deal_for_prod.get(b)
+            if deal and deal["sale_price"] < price:
+                price = deal["sale_price"]
+                st["price"] = price
+
+            if pkg_unit in ["g"] and pkg_qty > 0:
+                unit_price_val = price / (pkg_qty / 100.0)
+                unit_display = f"${unit_price_val:.2f}/100g"
+            elif pkg_unit in ["kg"] and pkg_qty > 0:
+                unit_price_val = price / (pkg_qty * 10.0)
+                unit_display = f"${unit_price_val:.2f}/100g"
+            elif pkg_unit in ["ml"] and pkg_qty > 0:
+                unit_price_val = price / (pkg_qty / 100.0)
+                unit_display = f"${unit_price_val:.2f}/100ml"
+            elif pkg_unit in ["l", "litre", "liter"] and pkg_qty > 0:
+                unit_price_val = price / (pkg_qty * 10.0)
+                unit_display = f"${unit_price_val:.2f}/100ml"
+            else:
+                unit_price_val = price / pkg_qty if pkg_qty > 0 else price
+                unit_display = f"${unit_price_val:.2f}/unit"
+
+            stores_list.append({
+                "store_id": st["store_id"],
+                "store_name": st["store_name"],
+                "banner": b,
+                "item_title": f"{prod['brand'] or 'Quality'} {prod['name']}",
+                "brand": prod["brand"] or "Canadian Brand",
+                "price": price,
+                "unit_price": round(unit_price_val, 2),
+                "unit_price_display": unit_display,
+                "package_size": f"{pkg_qty} {pkg_unit}",
+                "is_lowest": False,
+                "is_on_sale": bool(deal),
+                "flyer_deal": {
+                    "discount_text": deal["discount_text"],
+                    "valid_until": deal.get("valid_until", "2026-10-14")
+                } if deal else None
+            })
+
+        stores_list.sort(key=lambda x: x["price"])
+        if stores_list:
+            min_price = stores_list[0]["price"]
+            for s in stores_list:
+                s["is_lowest"] = (s["price"] == min_price)
+
+            lowest_store = stores_list[0]["store_name"]
+            grouped_results.append({
+                "product_id": prod["id"],
+                "name": prod["name"],
+                "brand": prod["brand"] or "Canadian Grocer",
+                "category": prod["category"],
+                "standard_package": f"{pkg_qty} {pkg_unit}",
+                "lowest_price": min_price,
+                "lowest_store": lowest_store,
+                "stores": stores_list
+            })
+
+    conn.close()
+    return {
+        "data": grouped_results,
+        "meta": {
+            "query": q,
+            "total_matches": len(grouped_results),
+            "city": city or "Edmonton"
+        }
+    }
 
 @app.get("/api/sync/status")
 def sync_status_endpoint():
