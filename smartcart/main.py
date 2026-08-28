@@ -1103,10 +1103,15 @@ def optimize_basket(req: OptimizeBasketRequest):
         gas_price_per_litre=gas_price
     )
 
-    items_dict = [it.dict() for it in req.items]
+    items_dict = [it.model_dump() if hasattr(it, "model_dump") else it.dict() for it in req.items]
     result = optimizer.optimize_basket(items_dict)
     if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
+        error_detail = {
+            "message": result["error"],
+            "recovery": result.get("recovery"),
+            "unmatched_items": result.get("unmatched_items", [])
+        } if result.get("recovery") else result["error"]
+        raise HTTPException(status_code=400, detail=error_detail)
 
     origin_query = f"{user_postal_code}, Edmonton, AB"
 

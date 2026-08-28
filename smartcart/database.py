@@ -35,8 +35,11 @@ def extract_unit_size(text: str) -> str:
     return "1 unit"
 
 def get_connection():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(DB_PATH), timeout=30.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute("PRAGMA foreign_keys=ON;")
     return conn
 
 def seed_dealdish_tables(conn):
@@ -243,6 +246,8 @@ def init_db():
 
     CREATE INDEX IF NOT EXISTS idx_inventory_store ON store_inventory(store_id);
     CREATE INDEX IF NOT EXISTS idx_inventory_product ON store_inventory(product_id);
+    CREATE INDEX IF NOT EXISTS idx_inventory_prod_store ON store_inventory(product_id, store_id);
+    CREATE INDEX IF NOT EXISTS idx_stores_lat_lon ON stores(latitude, longitude);
     CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
     CREATE INDEX IF NOT EXISTS idx_flyer_deals_flyer ON flyer_deals(flyer_id);
     CREATE INDEX IF NOT EXISTS idx_flyer_deals_page ON flyer_deals(page_number);
