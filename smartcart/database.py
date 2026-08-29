@@ -107,6 +107,9 @@ def seed_dealdish_tables(conn):
     # 4. Canadian Grocery Banners: Metro, Sobeys, FreshCo flyers & deals
     cursor.execute("SELECT banner FROM flyers WHERE banner IN ('Metro', 'Sobeys', 'FreshCo')")
     existing_banners = {r["banner"] for r in cursor.fetchall()}
+
+    cursor.execute("SELECT id FROM products")
+    valid_prod_ids = {r["id"] for r in cursor.fetchall()}
     
     if "Metro" not in existing_banners:
         cursor.execute("""
@@ -115,11 +118,11 @@ def seed_dealdish_tables(conn):
         """)
         metro_id = cursor.lastrowid
         metro_deals = [
-            (metro_id, 9, "Oikos Triple Zero Greek Yogurt 4x100g", "Dairy & Eggs", 1, 4.99, 3.49, "$0.87 / 100g", "Save $1.50 (30% OFF)", 1),
-            (metro_id, 4, "Fresh Canadian Atlantic Salmon Fillets", "Meat & Seafood", 1, 14.99, 10.99, "$2.20 / 100g", "Fresh Catch Special", 1),
-            (metro_id, 24, "Bertolli Extra Virgin Olive Oil 1L", "Pantry", 2, 16.99, 12.99, "$1.30 / 100ml", "Save $4.00", 0),
-            (metro_id, 12, "Organic Fair Trade Bananas (per kg)", "Produce", 2, 2.49, 1.69, "$0.17 / 100g", "Member Price", 0),
-            (metro_id, 23, "Premiere Moisson Artisanal Baguette", "Bakery & Deli", 3, 3.99, 2.79, "$0.70 / 100g", "Baked Fresh Daily", 0)
+            (metro_id, 9 if 9 in valid_prod_ids else None, "Oikos Triple Zero Greek Yogurt 4x100g", "Dairy & Eggs", 1, 4.99, 3.49, "$0.87 / 100g", "Save $1.50 (30% OFF)", 1),
+            (metro_id, 4 if 4 in valid_prod_ids else None, "Fresh Canadian Atlantic Salmon Fillets", "Meat & Seafood", 1, 14.99, 10.99, "$2.20 / 100g", "Fresh Catch Special", 1),
+            (metro_id, 24 if 24 in valid_prod_ids else None, "Bertolli Extra Virgin Olive Oil 1L", "Pantry", 2, 16.99, 12.99, "$1.30 / 100ml", "Save $4.00", 0),
+            (metro_id, 12 if 12 in valid_prod_ids else None, "Organic Fair Trade Bananas (per kg)", "Produce", 2, 2.49, 1.69, "$0.17 / 100g", "Member Price", 0),
+            (metro_id, 23 if 23 in valid_prod_ids else None, "Premiere Moisson Artisanal Baguette", "Bakery & Deli", 3, 3.99, 2.79, "$0.70 / 100g", "Baked Fresh Daily", 0)
         ]
         cursor.executemany("""
             INSERT INTO flyer_deals (flyer_id, product_id, title, category, page_number, original_price, sale_price, unit_sale_price, discount_text, is_front_page)
@@ -133,10 +136,10 @@ def seed_dealdish_tables(conn):
         """)
         sobeys_id = cursor.lastrowid
         sobeys_deals = [
-            (sobeys_id, 1, "Sterling Silver AAA Top Sirloin Steaks (per lb)", "Meat & Seafood", 1, 14.99, 9.99, "$2.20 / 100g", "Save $5.00/lb", 1),
-            (sobeys_id, 8, "Lactantia European Style Butter 454g", "Dairy & Eggs", 1, 8.49, 5.49, "$1.21 / 100g", "Scene+ Bonus 100pts", 1),
-            (sobeys_id, 13, "Jumbo Hass Avocados (Bag of 5)", "Produce", 2, 5.99, 3.99, "$0.80 / item", "Farm Market Deal", 0),
-            (sobeys_id, 21, "Classico Di Napoli Pasta Sauce 650ml", "Pantry", 2, 4.29, 2.49, "$0.38 / 100ml", "Save $1.80 (42% OFF)", 0)
+            (sobeys_id, 1 if 1 in valid_prod_ids else None, "Sterling Silver AAA Top Sirloin Steaks (per lb)", "Meat & Seafood", 1, 14.99, 9.99, "$2.20 / 100g", "Save $5.00/lb", 1),
+            (sobeys_id, 8 if 8 in valid_prod_ids else None, "Lactantia European Style Butter 454g", "Dairy & Eggs", 1, 8.49, 5.49, "$1.21 / 100g", "Scene+ Bonus 100pts", 1),
+            (sobeys_id, 13 if 13 in valid_prod_ids else None, "Jumbo Hass Avocados (Bag of 5)", "Produce", 2, 5.99, 3.99, "$0.80 / item", "Farm Market Deal", 0),
+            (sobeys_id, 21 if 21 in valid_prod_ids else None, "Classico Di Napoli Pasta Sauce 650ml", "Pantry", 2, 4.29, 2.49, "$0.38 / 100ml", "Save $1.80 (42% OFF)", 0)
         ]
         cursor.executemany("""
             INSERT INTO flyer_deals (flyer_id, product_id, title, category, page_number, original_price, sale_price, unit_sale_price, discount_text, is_front_page)
@@ -150,10 +153,10 @@ def seed_dealdish_tables(conn):
         """)
         freshco_id = cursor.lastrowid
         freshco_deals = [
-            (freshco_id, 2, "Boneless Skinless Chicken Thighs 1kg", "Meat & Seafood", 1, 12.49, 8.99, "$0.90 / 100g", "Save $3.50 (28% OFF)", 1),
-            (freshco_id, 22, "Catelli Smart Pasta Assorted Shapes 500g", "Pantry", 1, 2.99, 1.25, "$0.25 / 100g", "Crazy Low Price", 1),
-            (freshco_id, 6, "Burnbrae Large Grade A Eggs (12-pack)", "Dairy & Eggs", 2, 4.29, 3.19, "$0.27 / item", "Weekly Flyer Special", 0),
-            (freshco_id, 15, "Ontario Yellow Cooking Onions 3 lb Bag", "Produce", 2, 3.49, 1.49, "$0.11 / 100g", "Save $2.00 (57% OFF)", 0)
+            (freshco_id, 2 if 2 in valid_prod_ids else None, "Boneless Skinless Chicken Thighs 1kg", "Meat & Seafood", 1, 12.49, 8.99, "$0.90 / 100g", "Save $3.50 (28% OFF)", 1),
+            (freshco_id, 22 if 22 in valid_prod_ids else None, "Catelli Smart Pasta Assorted Shapes 500g", "Pantry", 1, 2.99, 1.25, "$0.25 / 100g", "Crazy Low Price", 1),
+            (freshco_id, 6 if 6 in valid_prod_ids else None, "Burnbrae Large Grade A Eggs (12-pack)", "Dairy & Eggs", 2, 4.29, 3.19, "$0.27 / item", "Weekly Flyer Special", 0),
+            (freshco_id, 15 if 15 in valid_prod_ids else None, "Ontario Yellow Cooking Onions 3 lb Bag", "Produce", 2, 3.49, 1.49, "$0.11 / 100g", "Save $2.00 (57% OFF)", 0)
         ]
         cursor.executemany("""
             INSERT INTO flyer_deals (flyer_id, product_id, title, category, page_number, original_price, sale_price, unit_sale_price, discount_text, is_front_page)
