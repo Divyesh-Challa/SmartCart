@@ -7,7 +7,7 @@ and matches natural language ingredient queries to catalog SKUs.
 import math
 import re
 from typing import Dict, Any, List, Optional, Tuple
-from smartcart.database import get_connection
+from smartcart.database import get_connection, haversine_distance_km
 
 def normalize_barcode(raw_code: str) -> str:
     """
@@ -185,11 +185,17 @@ def compute_packages_needed(required_qty: float, required_unit: str, product: Di
 
     return max(1, math.ceil(required_qty))
 
-def get_product_prices_across_stores(product_id: int) -> List[Dict[str, Any]]:
+def get_product_prices_across_stores(
+    product_id: int,
+    user_lat: Optional[float] = None,
+    user_lon: Optional[float] = None,
+    max_radius_km: float = 25.0,
+    city: Optional[str] = None
+) -> List[Dict[str, Any]]:
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-    SELECT s.id as store_id, s.name as store_name, s.banner, s.address, s.latitude, s.longitude,
+    SELECT s.id as store_id, s.name as store_name, s.banner, s.address, s.city, s.latitude, s.longitude,
            s.requires_membership,
            i.price, i.unit_price, i.in_stock, i.confidence_score,
            p.name as product_name, p.standard_unit_type, p.package_quantity, p.package_unit
@@ -201,4 +207,27 @@ def get_product_prices_across_stores(product_id: int) -> List[Dict[str, Any]]:
     """, (product_id,))
     rows = [dict(r) for r in cursor.fetchall()]
     conn.close()
-    return rows
+
+    if user_lat is not None and user_lon is not None:
+        filtered = []
+        for r in rows:
+            dist = haversine_distance_km(user_lat, user_lon, r["latitude"], r["longitude"])
+            if dist <= max_radius_km:
+                r["distance_km"] = round(dist, 1)
+                filtered.append(r)
+        if not filtered and rows:
+            # Rural or wide radius fallback: find nearest stores within 50 km
+            for r in rows:
+                dist = haversine_distance_km(user_lat, user_lon, r["latitude"], r["longitude"])
+                r["distance_km"] = round(dist, 1)
+            rows.sort(key=lambda x: (x.get("distance_km", 999), x["unit_price"]))
+            return rows[:15]
+        filtered.sort(key=lambda x: (x["unit_price"], x.get("distance_km", 999)))
+        return filtered
+    elif city:
+        city_lower = city.strip().lower()
+        city_rows = [r for r in rows if r.get("city", "").lower() == city_lower or city_lower in r.get("store_name", "").lower()]
+        if city_rows:
+            return city_rows
+
+    return rows[:25]
