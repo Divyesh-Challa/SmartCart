@@ -65,6 +65,147 @@ class UploadFlyerRequest(BaseModel):
     image_base64: str = Field(..., description="Base64 or Data URL of the flyer page image")
     title: Optional[str] = Field(None, description="Optional title for the flyer page")
 
+
+class RecipeRequestModel(BaseModel):
+    dish_name: str = Field(..., description="Recipe or ingredient requested")
+    cuisine_preference: Optional[str] = Field(None, description="Cuisine or dietary goal")
+    dietary_notes: Optional[str] = Field(None, description="Additional notes")
+    user_email: Optional[str] = Field(None, description="User email")
+
+@app.get("/api/recipes/dinner-deals")
+def get_dinner_deals(
+    category: Optional[str] = Query(None, description="Filter by category: under_3_dollars, quick_weeknight, comfort, high_protein, one_pan"),
+    banner: Optional[str] = Query(None, description="Filter by store banner: No Frills, Walmart, Superstore, Safeway"),
+    search: Optional[str] = Query(None, description="Search in title or description")
+):
+    conn = get_connection()
+    c = conn.cursor()
+    query = """
+    SELECT r.id, r.title, r.description, r.banner, r.cuisine, r.category,
+           r.prep_time_minutes, r.servings, r.difficulty, r.cost_per_serving,
+           r.total_sale_cost, r.total_regular_cost, r.savings_amount, r.savings_percent,
+           r.badge_text, r.instructions_json
+    FROM flyer_recipes r
+    WHERE 1=1
+    """
+    params = []
+    if category and category.lower() != 'all':
+        query += " AND (LOWER(r.category) LIKE ? OR LOWER(r.category) = ?)"
+        params.extend([f"%{category.lower()}%", category.lower()])
+    if banner and banner.lower() != 'all':
+        query += " AND LOWER(r.banner) = LOWER(?)"
+        params.append(banner)
+    if search:
+        query += " AND (LOWER(r.title) LIKE ? OR LOWER(r.description) LIKE ?)"
+        params.extend([f"%{search.lower()}%", f"%{search.lower()}%"])
+
+    query += " ORDER BY r.cost_per_serving ASC, r.savings_amount DESC"
+    c.execute(query, params)
+    recipes = [dict(row) for row in c.fetchall()]
+
+    for r in recipes:
+        if r.get("instructions_json"):
+            try:
+                import json
+                r["instructions"] = json.loads(r["instructions_json"])
+            except Exception:
+                r["instructions"] = []
+        c.execute("""
+            SELECT name, brand, package_size, category, sale_price, regular_price, savings, quantity, unit
+            FROM flyer_recipe_ingredients
+            WHERE recipe_id = ?
+            ORDER BY id ASC
+        """, (r["id"],))
+        r["ingredients"] = [dict(ing) for ing in c.fetchall()]
+
+    conn.close()
+    return {"count": len(recipes), "recipes": recipes}
+
+@app.get("/api/recipes/dinner-deals/{recipe_id}")
+def get_single_dinner_deal(recipe_id: int):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT * FROM flyer_recipes WHERE id = ?", (recipe_id,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    recipe = dict(row)
+    if recipe.get("instructions_json"):
+        try:
+            import json
+            recipe["instructions"] = json.loads(recipe["instructions_json"])
+        except Exception:
+            recipe["instructions"] = []
+    c.execute("""
+        SELECT name, brand, package_size, category, sale_price, regular_price, savings, quantity, unit
+        FROM flyer_recipe_ingredients
+        WHERE recipe_id = ?
+        ORDER BY id ASC
+    """, (recipe_id,))
+    recipe["ingredients"] = [dict(ing) for ing in c.fetchall()]
+    conn.close()
+    return recipe
+
+@app.post("/api/recipes/request")
+def submit_recipe_request(req: RecipeRequestModel):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO recipe_requests (dish_name, cuisine_preference, dietary_notes, user_email)
+        VALUES (?, ?, ?, ?)
+    """, (req.dish_name, req.cuisine_preference, req.dietary_notes, req.user_email))
+    conn.commit()
+    conn.close()
+    return {"status": "ok", "message": "Recipe request submitted successfully!"}
+
+@app.get("/api/coverage/stats")
+def get_coverage_stats():
+    return {
+        "total_stores_tracked": 2513,
+        "alberta_stores": 267,
+        "edmonton_metro_stores": 22,
+        "banners_count": 25,
+        "new_recipes_per_week": "500+",
+        "provinces": [
+            {"code": "ON", "name": "Ontario", "count": 1104},
+            {"code": "QC", "name": "Quebec", "count": 537},
+            {"code": "AB", "name": "Alberta", "count": 267},
+            {"code": "BC", "name": "British Columbia", "count": 184},
+            {"code": "NS", "name": "Nova Scotia", "count": 127},
+            {"code": "NB", "name": "New Brunswick", "count": 79},
+            {"code": "MB", "name": "Manitoba", "count": 68},
+            {"code": "SK", "name": "Saskatchewan", "count": 59},
+            {"code": "NL", "name": "Newfoundland", "count": 61}
+        ],
+        "retailers": [
+            {"name": "No Frills", "count": 348},
+            {"name": "Walmart", "count": 319},
+            {"name": "Real Canadian Superstore", "count": 119},
+            {"name": "Safeway", "count": 148},
+            {"name": "Save-On-Foods", "count": 172},
+            {"name": "Costco Wholesale", "count": 106},
+            {"name": "Metro", "count": 319},
+            {"name": "Sobeys", "count": 239}
+        ]
+    }
+
+@app.get("/api/deals/top-ticker")
+def get_top_deals_ticker():
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT d.title, d.sale_price, d.original_price, d.discount_text, f.banner
+        FROM flyer_deals d
+        JOIN flyers f ON f.id = d.flyer_id
+        WHERE d.original_price IS NOT NULL AND d.original_price > d.sale_price
+        ORDER BY (d.original_price - d.sale_price) DESC
+        LIMIT 14
+    """)
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return {"deals": rows}
+
 @app.post("/api/recipe/parse")
 @app.post("/api/recipes/parse")
 def parse_recipe(req: ParseRecipeRequest):
