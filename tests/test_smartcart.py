@@ -337,6 +337,35 @@ class TestSmartCartEnhancementsTDD(unittest.TestCase):
         self.assertIn("data", body)
         self.assertGreaterEqual(len(body["data"]), 1)
 
+    def test_flyer_deals_endpoint_has_all_six_structured_fields(self):
+        res = self.client.get("/api/flyers/deals")
+        self.assertEqual(res.status_code, 200)
+        deals = res.json().get("deals", [])
+        self.assertGreater(len(deals), 0)
+        first = deals[0]
+        for field in ["store_name", "item_name", "sale_price", "unit_size", "valid_until", "category"]:
+            self.assertIn(field, first, f"Field {field} must be present in flyer deal")
+            self.assertIsNotNone(first[field], f"Field {field} must not be None")
+
+    def test_meal_plan_generate_post_endpoint(self):
+        payload = {
+            "days": ["Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday", "Wednesday"],
+            "servings": 4
+        }
+        res = self.client.post("/api/meal-plan/generate", json=payload)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data.get("status"), "success")
+        self.assertIn("meal_plan", data)
+        self.assertIn("summary", data)
+        for day in payload["days"]:
+            self.assertIn(day, data["meal_plan"])
+            meal = data["meal_plan"][day]
+            self.assertIn("title", meal)
+            self.assertIn("cost_per_serving", meal)
+            self.assertIn("ingredients", meal)
+            self.assertGreater(len(meal["ingredients"]), 0)
+
 if __name__ == "__main__":
     unittest.main()
 

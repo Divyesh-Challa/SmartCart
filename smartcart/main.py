@@ -35,6 +35,7 @@ from smartcart.scheduler import (
     get_sync_status,
     get_current_flyer_cycle
 )
+from smartcart.meal_generator import generate_flyer_grounded_meal_plan
 
 app = FastAPI(
     title="SmartCart API",
@@ -278,6 +279,24 @@ def get_flyer_grounded_recipes(
             "flyer_cycle": "Active Weekly Circulars"
         }
     }
+
+class MealPlanRequestModel(BaseModel):
+    days: Optional[List[str]] = Field(None, description="Days to schedule dinners for (e.g. Thursday to Wednesday)")
+    target_city: Optional[str] = Field("Edmonton", description="Target Canadian city")
+    preferred_stores: Optional[List[str]] = Field(None, description="Preferred store banners")
+    dietary_preference: Optional[str] = Field(None, description="Dietary preference category")
+    servings: Optional[int] = Field(4, description="Number of servings per dinner")
+
+@app.post("/api/meal-plan/generate")
+@app.post("/api/v1/meal-plan/generate")
+def generate_meal_plan_endpoint(req: MealPlanRequestModel):
+    return generate_flyer_grounded_meal_plan(
+        days=req.days,
+        target_city=req.target_city or "Edmonton",
+        preferred_stores=req.preferred_stores,
+        dietary_preference=req.dietary_preference,
+        servings=req.servings or 4
+    )
 
 @app.post("/api/recipes/request")
 def submit_recipe_request(req: RecipeRequestModel):
@@ -927,6 +946,10 @@ def get_catalog_flyer_deals(
     SELECT d.id, d.flyer_id, d.product_id, d.title as name, d.category, d.page_number, d.original_price,
            d.sale_price, d.unit_sale_price as std_price, d.discount_text, d.is_front_page,
            f.banner, f.valid_from, f.valid_to,
+           COALESCE(d.store_name, f.banner) as store_name,
+           COALESCE(d.item_name, d.title) as item_name,
+           COALESCE(d.unit_size, printf('%g %s', p.package_quantity, p.package_unit), '1 unit') as unit_size,
+           COALESCE(d.valid_until, f.valid_to) as valid_until,
            p.name as matched_product_name, p.package_quantity, p.package_unit,
            p.standard_unit_type as std_type,
            printf('%g %s', p.package_quantity, p.package_unit) as package_size,

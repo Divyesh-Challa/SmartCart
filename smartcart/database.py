@@ -16,7 +16,13 @@ def extract_unit_size(text: str) -> str:
     """Extracts package / unit size (e.g. 1kg, 454g, 750g, 4L, 12-pack) from product title."""
     if not text:
         return "1 unit"
+    t_lower = text.lower()
+    if "per kg" in t_lower:
+        return "1 kg"
+    if "per lb" in t_lower:
+        return "1 lb"
     patterns = [
+        r"(\d+(?:\.\d+)?\s*-\s*(?:pack|pk)\b)",
         r"(\d+(?:\.\d+)?\s*(?:kg|g|lb|lbs|oz|ml|l|L)\b)",
         r"(\d+(?:\.\d+)?\s*(?:pack|pk|count|ct|bunch|cans?|bottles?|jug|bag|loaf)\b)",
         r"(bag of \d+)",
@@ -370,11 +376,14 @@ def init_db():
         WHERE (unit_size IS NULL OR unit_size = '') AND product_id IS NOT NULL
     """)
 
-    # Fill any remaining unit_size with extracted size from title or default
-    cursor.execute("SELECT id, title FROM flyer_deals WHERE unit_size IS NULL OR unit_size = ''")
+    # Fill unit_size with extracted size from title when available
+    cursor.execute("SELECT id, title, unit_size FROM flyer_deals")
     for r in cursor.fetchall():
-        u_size = extract_unit_size(r["title"])
-        cursor.execute("UPDATE flyer_deals SET unit_size = ? WHERE id = ?", (u_size, r["id"]))
+        ext = extract_unit_size(r["title"])
+        if ext and ext != "1 unit":
+            cursor.execute("UPDATE flyer_deals SET unit_size = ? WHERE id = ?", (ext, r["id"]))
+        elif not r["unit_size"]:
+            cursor.execute("UPDATE flyer_deals SET unit_size = '1 unit' WHERE id = ?", (r["id"],))
 
     conn.commit()
 

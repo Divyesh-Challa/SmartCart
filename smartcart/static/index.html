@@ -876,11 +876,16 @@
           </p>
         </div>
 
-        <!-- 1-Click Sync to List -->
-        <button onclick="syncMealPlanToShoppingList()" class="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:brightness-110 text-white font-bold text-sm shadow-md transition-all active:scale-95">
-          <i class="fa-solid fa-arrow-down-short-wide"></i>
-          <span>Sync Plan to Smart List</span>
-        </button>
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <button onclick="autoGenerateFlyerMealPlan()" class="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-500 hover:brightness-110 text-white font-bold text-sm shadow-md transition-all active:scale-95">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <span>Auto-Generate from Flyers</span>
+          </button>
+          <button onclick="syncMealPlanToShoppingList()" class="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-white dark:bg-sc-midnight hover:bg-slate-100 dark:hover:bg-sc-border text-sc-ink dark:text-white font-bold text-sm border border-sc-border dark:border-sc-darkborder shadow-sm transition-all active:scale-95">
+            <i class="fa-solid fa-arrow-down-short-wide text-sc-emerald"></i>
+            <span>Sync Plan to Smart List</span>
+          </button>
+        </div>
       </div>
 
       <!-- Weekly Budget Summary Banner -->
@@ -3075,24 +3080,84 @@
       }
     }
 
+    async function autoGenerateFlyerMealPlan() {
+      try {
+        showToast('Generating flyer-grounded meal plan...');
+        const city = AppState.selectedCity || 'Edmonton';
+        const res = await fetch(`/api/meal-plan/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            days: DAYS_ORDER,
+            target_city: city,
+            servings: 4
+          })
+        });
+        const json = await res.json();
+        if (json.status === 'success' && json.meal_plan) {
+          AppState.mealPlan = {};
+          DAYS_ORDER.forEach(day => {
+            const m = json.meal_plan[day];
+            if (m) {
+              AppState.mealPlan[day] = {
+                id: m.id,
+                title: m.title,
+                cost: m.cost_per_serving,
+                banner: m.banner
+              };
+              const existingIdx = AppState.recipes.findIndex(r => r.title === m.title);
+              if (existingIdx >= 0) {
+                AppState.recipes[existingIdx] = m;
+              } else {
+                AppState.recipes.push(m);
+              }
+            }
+          });
+          localStorage.setItem('sc_meal_plan', JSON.stringify(AppState.mealPlan));
+          renderMealPlan();
+          renderRecipes();
+          showToast('7-Day Meal Plan grounded in active weekly flyer deals generated!');
+          return;
+        }
+      } catch (err) {
+        console.warn('POST /api/meal-plan/generate failed, falling back to cached recipes', err);
+      }
+
+      if (AppState.recipes.length > 0) {
+        DAYS_ORDER.forEach((day, idx) => {
+          const r = AppState.recipes[idx % AppState.recipes.length];
+          AppState.mealPlan[day] = {
+            id: r.id,
+            title: r.title,
+            cost: r.cost_per_serving || 2.99,
+            banner: r.banner
+          };
+        });
+        localStorage.setItem('sc_meal_plan', JSON.stringify(AppState.mealPlan));
+        renderMealPlan();
+        showToast('7-Day Meal Plan generated from active circular recipes!');
+      }
+    }
+
     function syncMealPlanToShoppingList() {
       let added = 0;
       Object.values(AppState.mealPlan).forEach(item => {
-        const fullRecipe = AppState.recipes.find(r => r.id === item.id);
+        const fullRecipe = AppState.recipes.find(r => r.id === item.id || r.title === item.title);
         if (fullRecipe && fullRecipe.ingredients) {
           fullRecipe.ingredients.forEach(ing => {
             AppState.basket.push({
               name: ing.name,
               brand: ing.brand || 'Flyer Item',
-              package_size: ing.package_size || '1 unit',
+              package_size: ing.package_size || ing.unit_size || '1 unit',
               category: ing.category || 'Pantry',
-              price: ing.sale_price,
-              reg_price: ing.regular_price,
-              banner: fullRecipe.banner,
+              price: ing.sale_price !== undefined ? ing.sale_price : 0,
+              reg_price: ing.regular_price !== undefined ? ing.regular_price : ing.sale_price,
+              banner: ing.store_name || fullRecipe.banner || 'No Frills',
               recipeName: fullRecipe.title,
               quantity: 1,
               checked: false,
-              isPantry: false
+              isPantry: false,
+              is_flyer_deal: Boolean(ing.is_on_sale)
             });
             added++;
           });
@@ -3236,26 +3301,60 @@
       showToast('Item removed from basket');
     }
 
-    function handleQuickAdd() {
+    async function handleQuickAdd() {
       const input = document.getElementById('quickAddInput');
       const val = input.value.trim();
       if (!val) return;
+      input.value = '';
+
+      try {
+        const city = AppState.selectedCity || 'Edmonton';
+        const res = await fetch(`/api/v1/search/compare?q=${encodeURIComponent(val)}&city=${encodeURIComponent(city)}`);
+        const json = await res.json();
+        const matches = json.data || [];
+
+        if (matches.length > 0 && matches[0].stores && matches[0].stores.length > 0) {
+          const prod = matches[0];
+          const bestStore = prod.stores[0];
+          const price = bestStore.price;
+          const regPrice = bestStore.is_on_sale ? Math.round(price * 1.25 * 100) / 100 : price;
+
+          AppState.basket.push({
+            name: prod.name,
+            brand: bestStore.brand || prod.brand || 'Canadian Brand',
+            package_size: bestStore.package_size || prod.standard_package || '1 unit',
+            category: prod.category || 'Produce & Grocery',
+            price: price,
+            reg_price: regPrice,
+            banner: bestStore.store_name || bestStore.banner,
+            quantity: 1,
+            checked: false,
+            isPantry: false,
+            is_flyer_deal: Boolean(bestStore.is_on_sale)
+          });
+          localStorage.setItem('sc_basket', JSON.stringify(AppState.basket));
+          renderBasket();
+          showToast(`Added ${prod.name} from ${bestStore.store_name} ($${price.toFixed(2)}) to basket!`);
+          return;
+        }
+      } catch (e) {
+        console.warn('Quick add multi-store lookup failed, falling back', e);
+      }
 
       AppState.basket.push({
         name: val,
-        brand: 'Quick Add',
+        brand: 'Grocery Item',
         package_size: '1 unit',
         category: 'Produce & Grocery',
         price: 2.99,
         reg_price: 3.99,
-        banner: 'Store',
+        banner: 'Local Market',
         quantity: 1,
         checked: false,
         isPantry: false
       });
       localStorage.setItem('sc_basket', JSON.stringify(AppState.basket));
       renderBasket();
-      input.value = '';
       showToast(`"${val}" added to basket!`);
     }
 
