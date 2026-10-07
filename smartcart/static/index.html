@@ -14,6 +14,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Font Awesome 6 -->
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <!-- ZXing Barcode Scanning Engine -->
+  <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
   <!-- Google Fonts: Inter & Plus Jakarta Sans & DM Sans -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -224,10 +226,10 @@
         <div class="flex items-center gap-2.5 sm:gap-3.5 ml-4 sm:ml-6 flex-shrink-0">
           
           <!-- Quick Cart Drawer Trigger -->
-          <a href="#shoppingListSection" class="relative inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 text-white transition-colors" title="View Shopping List">
+          <button onclick="openBasketDrawer()" class="relative inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer" title="View Basket Details">
             <i class="fa-solid fa-basket-shopping text-sm"></i>
             <span id="navCartCountBadge" class="absolute -top-1 -right-1 bg-sc-emerald text-sc-midnight font-black text-[11px] w-5 h-5 rounded-full flex items-center justify-center shadow-md">0</span>
-          </a>
+          </button>
 
           <!-- Dark Mode Toggle -->
           <button id="themeToggleBtn" onclick="toggleDarkMode()" class="w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors" title="Toggle Appearance">
@@ -1628,8 +1630,94 @@
           <!-- Populated dynamically -->
         </div>
       </div>
-
     </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- BASKET SLIDE-OVER DRAWER -->
+  <!-- ============================================================== -->
+  <div id="basketDrawerBackdrop" onclick="closeBasketDrawer()" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden transition-opacity duration-300"></div>
+  
+  <div id="basketDrawer" class="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white dark:bg-sc-darksurface shadow-2xl border-l border-sc-border dark:border-sc-darkborder flex flex-col transform translate-x-full transition-transform duration-300 ease-in-out">
+    
+    <!-- Drawer Header -->
+    <div class="p-5 border-b border-sc-border dark:border-sc-darkborder flex items-center justify-between bg-sc-canvas dark:bg-sc-midnight">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-sc-emerald/15 text-sc-emerald flex items-center justify-center text-lg font-black">
+          <i class="fa-solid fa-basket-shopping"></i>
+        </div>
+        <div>
+          <h2 class="text-base font-black text-sc-ink dark:text-white flex items-center gap-2">
+            My SmartCart Basket
+            <span id="drawerBadgeCount" class="text-xs px-2.5 py-0.5 rounded-full bg-sc-emerald text-sc-midnight font-bold">0</span>
+          </h2>
+          <p class="text-xs text-sc-muted dark:text-slate-400">Items staged for multi-store route optimizer</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="clearBasket()" class="p-2 text-xs text-red-500 hover:text-red-700 font-bold hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-colors" title="Clear All Items">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>
+        <button onclick="closeBasketDrawer()" class="w-8 h-8 rounded-full bg-white dark:bg-white/10 text-sc-ink dark:text-white flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/20 transition-colors">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Savings & Cost Summary Banner inside Drawer -->
+    <div class="px-5 py-3.5 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border-b border-sc-border dark:border-sc-darkborder grid grid-cols-3 gap-2 text-center">
+      <div class="bg-white dark:bg-sc-midnight p-2 rounded-xl border border-sc-border/50 dark:border-sc-darkborder">
+        <div class="text-[10px] uppercase font-bold text-sc-muted dark:text-slate-400">Est. Total</div>
+        <div id="drawerTotalCost" class="text-sm sm:text-base font-black text-sc-ink dark:text-white tabular-nums">$0.00</div>
+      </div>
+      <div class="bg-white dark:bg-sc-midnight p-2 rounded-xl border border-sc-border/50 dark:border-sc-darkborder">
+        <div class="text-[10px] uppercase font-bold text-sc-muted dark:text-slate-400">Shelf Price</div>
+        <div id="drawerRegCost" class="text-sm sm:text-base font-bold text-slate-400 line-through tabular-nums">$0.00</div>
+      </div>
+      <div class="bg-emerald-500/20 dark:bg-emerald-950/50 p-2 rounded-xl border border-emerald-500/30">
+        <div class="text-[10px] uppercase font-bold text-sc-emerald">You Save</div>
+        <div id="drawerTotalSaved" class="text-sm sm:text-base font-black text-sc-emerald tabular-nums">$0.00</div>
+      </div>
+    </div>
+
+    <!-- Quick Add Input Bar inside Drawer -->
+    <div class="p-3 border-b border-sc-border dark:border-sc-darkborder bg-sc-canvas dark:bg-sc-midnight">
+      <div class="flex gap-2">
+        <input type="text" id="drawerQuickInput" onkeydown="if(event.key==='Enter')handleDrawerQuickAdd()" placeholder="Add grocery item to basket..." class="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder text-xs text-sc-ink dark:text-white outline-none focus:ring-2 focus:ring-sc-emerald">
+        <button onclick="handleDrawerQuickAdd()" class="px-3.5 py-2 rounded-xl bg-sc-navy dark:bg-sc-emerald hover:brightness-110 text-white dark:text-sc-midnight font-bold text-xs transition-all">
+          <i class="fa-solid fa-plus"></i> Add
+        </button>
+      </div>
+    </div>
+
+    <!-- Items Scrollable Container -->
+    <div id="drawerItemsList" class="flex-1 overflow-y-auto p-4 space-y-2.5">
+      <!-- Items dynamically populated -->
+    </div>
+
+    <!-- Drawer Footer Actions -->
+    <div class="p-4 border-t border-sc-border dark:border-sc-darkborder bg-sc-canvas dark:bg-sc-midnight space-y-2.5">
+      <button onclick="runOptimizerFromDrawer()" class="w-full py-3.5 rounded-2xl bg-sc-emerald hover:brightness-110 text-sc-midnight font-black text-sm shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
+        <i class="fa-solid fa-route"></i>
+        <span>Run 3-Plan Route Optimizer</span>
+        <span class="text-xs bg-sc-midnight/20 px-2 py-0.5 rounded-full font-bold ml-1">Algorithm</span>
+      </button>
+
+      <button onclick="jumpToFullShoppingList()" class="w-full py-2.5 rounded-xl bg-white dark:bg-white/10 hover:bg-gray-100 dark:hover:bg-white/20 text-sc-ink dark:text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors border border-sc-border dark:border-sc-darkborder">
+        <i class="fa-solid fa-list-check"></i>
+        <span>Open Full Shopping List Section</span>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- Floating Quick-Access Basket Trigger Button -->
+  <div id="floatingBasketBtn" class="fixed bottom-6 right-6 z-40">
+    <button onclick="openBasketDrawer()" class="flex items-center gap-2.5 px-4 py-3 rounded-full bg-sc-emerald hover:brightness-110 text-sc-midnight font-black text-sm shadow-2xl transition-all transform hover:scale-105 active:scale-95 border-2 border-sc-midnight/20" title="Open My Basket">
+      <i class="fa-solid fa-basket-shopping text-base"></i>
+      <span>My Basket</span>
+      <span id="floatingCartCountBadge" class="bg-sc-midnight text-white text-xs px-2 py-0.5 rounded-full font-bold">0</span>
+    </button>
   </div>
 
 
@@ -2567,11 +2655,17 @@
       const container = document.getElementById('shoppingListContainer');
       const badge = document.getElementById('navCartCountBadge');
       const countBadge = document.getElementById('listItemsCountBadge');
+      const floatingBadge = document.getElementById('floatingCartCountBadge');
+      const drawerBadge = document.getElementById('drawerBadgeCount');
 
       const items = AppState.basket.filter(it => AppState.showPantryStaples || !it.isPantry);
 
-      badge.innerText = items.length;
-      countBadge.innerText = `${items.length} items`;
+      if (badge) badge.innerText = items.length;
+      if (countBadge) countBadge.innerText = `${items.length} items`;
+      if (floatingBadge) floatingBadge.innerText = items.length;
+      if (drawerBadge) drawerBadge.innerText = items.length;
+
+      renderBasketDrawer();
 
       if (items.length === 0) {
         container.innerHTML = `
@@ -2774,6 +2868,163 @@
       renderBasket();
     }
 
+    // --- BASKET SLIDE-OVER DRAWER ENGINE ---
+    function openBasketDrawer() {
+      const drawer = document.getElementById('basketDrawer');
+      const backdrop = document.getElementById('basketDrawerBackdrop');
+      if (!drawer || !backdrop) return;
+      backdrop.classList.remove('hidden');
+      drawer.classList.remove('translate-x-full');
+      document.body.classList.add('overflow-hidden');
+      renderBasketDrawer();
+    }
+
+    function closeBasketDrawer() {
+      const drawer = document.getElementById('basketDrawer');
+      const backdrop = document.getElementById('basketDrawerBackdrop');
+      if (!drawer || !backdrop) return;
+      drawer.classList.add('translate-x-full');
+      setTimeout(() => {
+        if (backdrop) backdrop.classList.add('hidden');
+      }, 300);
+      document.body.classList.remove('overflow-hidden');
+    }
+
+    function renderBasketDrawer() {
+      const container = document.getElementById('drawerItemsList');
+      const badge = document.getElementById('drawerBadgeCount');
+      const totalCostEl = document.getElementById('drawerTotalCost');
+      const regCostEl = document.getElementById('drawerRegCost');
+      const totalSavedEl = document.getElementById('drawerTotalSaved');
+      if (!container) return;
+
+      const items = AppState.basket || [];
+      if (badge) badge.innerText = items.length;
+
+      let saleTotal = 0;
+      let regTotal = 0;
+
+      items.forEach(it => {
+        const qty = it.quantity || 1;
+        const sPrice = (typeof it.price === 'number' ? it.price : parseFloat(it.price) || 0);
+        const rPrice = (typeof it.reg_price === 'number' ? it.reg_price : (parseFloat(it.reg_price) || sPrice));
+        saleTotal += sPrice * qty;
+        regTotal += rPrice * qty;
+      });
+
+      const saved = Math.max(0, regTotal - saleTotal);
+      if (totalCostEl) totalCostEl.innerText = `$${saleTotal.toFixed(2)}`;
+      if (regCostEl) regCostEl.innerText = `$${regTotal.toFixed(2)}`;
+      if (totalSavedEl) totalSavedEl.innerText = `−$${saved.toFixed(2)}`;
+
+      if (items.length === 0) {
+        container.innerHTML = `
+          <div class="h-full flex flex-col items-center justify-center p-8 text-center text-sc-muted dark:text-slate-400 space-y-3">
+            <div class="w-16 h-16 rounded-3xl bg-sc-canvas dark:bg-white/5 flex items-center justify-center text-2xl text-sc-emerald">
+              <i class="fa-solid fa-basket-shopping"></i>
+            </div>
+            <p class="font-bold text-base text-sc-ink dark:text-white">Your basket is empty</p>
+            <p class="text-xs max-w-xs">Clip ingredients from weekly circulars, scan a barcode, or add grocery items above.</p>
+            <button onclick="closeBasketDrawer(); window.location.hash='#flyersSection';" class="mt-2 px-4 py-2 rounded-xl bg-sc-emerald text-sc-midnight font-bold text-xs hover:brightness-110">
+              Browse Canadian Flyers
+            </button>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = items.map((it, idx) => {
+        const qty = it.quantity || 1;
+        const sPrice = (typeof it.price === 'number' ? it.price : parseFloat(it.price) || 0);
+        const rPrice = (typeof it.reg_price === 'number' ? it.reg_price : (parseFloat(it.reg_price) || sPrice));
+        const lineTotal = sPrice * qty;
+
+        return `
+          <div class="p-3.5 rounded-2xl bg-white dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder shadow-sm flex items-center justify-between gap-3 transition-all hover:border-sc-emerald/50">
+            <div class="flex items-center gap-3 min-w-0 flex-1">
+              <button onclick="toggleBasketItemChecked(${idx})" class="w-5 h-5 rounded-lg border-2 ${it.checked ? 'bg-sc-emerald border-sc-emerald text-sc-midnight' : 'border-gray-300 dark:border-gray-600'} flex items-center justify-center text-xs flex-shrink-0 transition-colors">
+                ${it.checked ? '<i class="fa-solid fa-check text-[10px]"></i>' : ''}
+              </button>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-xs font-black text-sc-ink dark:text-white truncate ${it.checked ? 'line-through opacity-50' : ''}">${it.name}</span>
+                  ${it.banner ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300">${it.banner}</span>` : ''}
+                </div>
+                <div class="text-[11px] text-sc-muted dark:text-slate-400 flex items-center gap-2 mt-0.5">
+                  <span class="font-bold text-sc-emerald">$${sPrice.toFixed(2)}/ea</span>
+                  ${rPrice > sPrice ? `<span class="line-through text-slate-400">$${rPrice.toFixed(2)}</span>` : ''}
+                  <span>• Line: <strong class="text-sc-ink dark:text-white font-bold">$${lineTotal.toFixed(2)}</strong></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <div class="flex items-center bg-sc-canvas dark:bg-sc-darksurface rounded-xl border border-sc-border dark:border-sc-darkborder p-0.5">
+                <button onclick="updateBasketQty(${idx}, -1)" class="w-6 h-6 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-center text-xs text-sc-ink dark:text-white font-bold">-</button>
+                <span class="w-6 text-center text-xs font-black text-sc-ink dark:text-white tabular-nums">${qty}</span>
+                <button onclick="updateBasketQty(${idx}, 1)" class="w-6 h-6 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-center text-xs text-sc-ink dark:text-white font-bold">+</button>
+              </div>
+              <button onclick="removeBasketItem(${idx})" class="p-1.5 text-sc-muted hover:text-red-500 transition-colors" title="Delete">
+                <i class="fa-regular fa-trash-can text-xs"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function handleDrawerQuickAdd() {
+      const input = document.getElementById('drawerQuickInput');
+      if (!input) return;
+      const val = input.value.trim();
+      if (!val) return;
+      AppState.basket.push({
+        name: val,
+        brand: 'Quick Add',
+        package_size: '1 unit',
+        category: 'Produce & Grocery',
+        price: 2.99,
+        reg_price: 3.99,
+        banner: 'Store',
+        quantity: 1,
+        checked: false,
+        isPantry: false
+      });
+      localStorage.setItem('sc_basket', JSON.stringify(AppState.basket));
+      renderBasket();
+      renderBasketDrawer();
+      input.value = '';
+      showToast(`"${val}" added to basket!`);
+    }
+
+    function clearBasket() {
+      if (!AppState.basket || AppState.basket.length === 0) return;
+      if (!confirm('Clear all items from your SmartCart basket?')) return;
+      AppState.basket = [];
+      localStorage.setItem('sc_basket', JSON.stringify(AppState.basket));
+      renderBasket();
+      renderBasketDrawer();
+      showToast('Basket cleared');
+    }
+
+    function runOptimizerFromDrawer() {
+      closeBasketDrawer();
+      const el = document.getElementById('optimizerSection');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+        setTimeout(() => {
+          optimizeRoute();
+        }, 450);
+      }
+    }
+
+    function jumpToFullShoppingList() {
+      closeBasketDrawer();
+      const el = document.getElementById('shoppingListSection');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
     // --- FEATURE 5: SMARTSCAN LENS ENGINE ---
     function setScannerMode(mode) {
       AppState.scannerMode = mode;
@@ -2942,9 +3193,16 @@
       const laser = document.getElementById('scannerLaser');
       const btn = document.getElementById('cameraToggleBtn');
 
-      if (AppState.cameraStream) {
-        AppState.cameraStream.getTracks().forEach(track => track.stop());
-        AppState.cameraStream = null;
+      if (AppState.cameraStream || AppState.codeReader) {
+        if (AppState.codeReader) {
+          try { AppState.codeReader.reset(); } catch(e){}
+          AppState.codeReader = null;
+        }
+        if (AppState.cameraStream) {
+          AppState.cameraStream.getTracks().forEach(track => track.stop());
+          AppState.cameraStream = null;
+        }
+        video.srcObject = null;
         video.classList.add('hidden');
         placeholder.classList.remove('hidden');
         laser.classList.add('hidden');
@@ -2953,23 +3211,77 @@
       }
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        AppState.cameraStream = stream;
-        video.srcObject = stream;
-        video.play();
-        video.classList.remove('hidden');
-        placeholder.classList.add('hidden');
-        laser.classList.remove('hidden');
-        btn.innerHTML = '<i class="fa-solid fa-stop"></i> Stop Camera';
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Initializing Camera...';
 
-        setTimeout(() => {
-          if (AppState.cameraStream) {
-            triggerBarcodeScan('068113112345');
-            showToast('Barcode recognized from camera!');
-          }
-        }, 3000);
+        if (typeof ZXing !== 'undefined') {
+          AppState.codeReader = new ZXing.BrowserMultiFormatReader();
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          AppState.cameraStream = stream;
+          video.srcObject = stream;
+          await video.play();
+
+          video.classList.remove('hidden');
+          placeholder.classList.add('hidden');
+          laser.classList.remove('hidden');
+          btn.innerHTML = '<i class="fa-solid fa-stop"></i> Stop Camera';
+
+          AppState.codeReader.decodeFromVideoElement(video, (result, err) => {
+            if (result) {
+              const code = result.getText();
+              if (code && code !== AppState.lastScannedBarcode) {
+                AppState.lastScannedBarcode = code;
+                showToast(`Scanned: ${code}`);
+                triggerBarcodeScan(code);
+                toggleCameraScanner();
+              }
+            }
+          });
+        } else if ('BarcodeDetector' in window) {
+          const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code'] });
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          AppState.cameraStream = stream;
+          video.srcObject = stream;
+          await video.play();
+
+          video.classList.remove('hidden');
+          placeholder.classList.add('hidden');
+          laser.classList.remove('hidden');
+          btn.innerHTML = '<i class="fa-solid fa-stop"></i> Stop Camera';
+
+          const scanLoop = async () => {
+            if (!AppState.cameraStream) return;
+            try {
+              const detected = await detector.detect(video);
+              if (detected && detected.length > 0) {
+                const code = detected[0].rawValue;
+                if (code && code !== AppState.lastScannedBarcode) {
+                  AppState.lastScannedBarcode = code;
+                  showToast(`Scanned: ${code}`);
+                  triggerBarcodeScan(code);
+                  toggleCameraScanner();
+                  return;
+                }
+              }
+            } catch (e) {}
+            requestAnimationFrame(scanLoop);
+          };
+          requestAnimationFrame(scanLoop);
+        } else {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          AppState.cameraStream = stream;
+          video.srcObject = stream;
+          await video.play();
+
+          video.classList.remove('hidden');
+          placeholder.classList.add('hidden');
+          laser.classList.remove('hidden');
+          btn.innerHTML = '<i class="fa-solid fa-stop"></i> Stop Camera';
+          showToast('Camera active. Point at barcode or enter UPC below.');
+        }
       } catch (err) {
-        alert('Camera access unavailable. Use manual input or sample barcodes!');
+        console.warn('Camera stream error:', err);
+        btn.innerHTML = '<i class="fa-solid fa-video"></i> Start Camera Stream';
+        alert('Camera access unavailable on this device or permission was denied. You can test barcode scanning by clicking any sample Canadian product below or typing UPC directly!');
       }
     }
 
@@ -3315,6 +3627,19 @@
     function closeProModal() {
       document.getElementById('proModal').classList.add('hidden');
     }
+
+    // Global keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeBasketDrawer();
+        closeProModal();
+        if (typeof closeFlyerModal === 'function') closeFlyerModal();
+        if (typeof closeRecipeModal === 'function') closeRecipeModal();
+        if (typeof closeMealPlanDayModal === 'function') closeMealPlanDayModal();
+        if (typeof closeReceiptModal === 'function') closeReceiptModal();
+        if (typeof closeAlertModal === 'function') closeAlertModal();
+      }
+    });
   </script>
 </body>
 </html>
