@@ -228,5 +228,20 @@ class TestFlyersAndDeals(unittest.TestCase):
         self.assertEqual(res_van.status_code, 200)
         self.assertGreaterEqual(len(res_van.json()["flyers"]), 5)
 
+    def test_sync_status_and_refresh(self):
+        res_status = self.client.get("/api/sync/status")
+        self.assertEqual(res_status.status_code, 200)
+        data = res_status.json()
+        self.assertEqual(data["status"], "SUCCESS")
+        self.assertEqual(data["stores_indexed"], 3524)
+        self.assertIn("flyer_cycle", data)
+        self.assertIn("gas_prices", data)
+
+        res_refresh = self.client.post("/api/sync/refresh")
+        self.assertEqual(res_refresh.status_code, 200)
+        ref_data = res_refresh.json()
+        self.assertEqual(ref_data["status"], "SUCCESS")
+        self.assertEqual(ref_data["stores_count"], 3524)
+
 if __name__ == "__main__":
     unittest.main()

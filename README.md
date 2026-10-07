@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![SQLite](https://img.shields.io/badge/Database-SQLite3-003B57.svg?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-v3.4-38B2AC.svg?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![Build & Tests](https://img.shields.io/badge/Tests-20%2F20%20Passing-brightgreen.svg)]()
+[![Build & Tests](https://img.shields.io/badge/Tests-21%2F21%20Passing-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 
 > **Live Deployment:** [https://smartcart-9djq.onrender.com](https://smartcart-9djq.onrender.com)  
@@ -138,6 +138,13 @@ SmartCart seeds and indexes **3,524 geocoded Canadian grocery stores** across al
 - Receipt logging dashboard with 30-day, 90-day, and 1-year historical analytics.
 - Price drop watchdog to monitor volatility on household essentials (butter, eggs, chicken breast, olive oil).
 
+### 🔄 Automated Store Data Refresh & Background Scheduler
+- **Asynchronous Background Worker:** Executes every 6 hours continuously in the background via `asyncio` in FastAPI.
+- **Thursday Flyer Reset:** Automatically detects weekly Canadian flyer resets (Thursday 12:01 AM) and rotates promotional circular markdowns across all 35 banners.
+- **Dynamic Fuel & Inventory Sync:** Updates live gas price benchmarks and evaluates user price drop alerts against refreshed inventory costs.
+- **Audit Logging:** Every sync cycle logs stores count, inventory updates, and timestamp metrics into SQLite `sync_history`.
+- **Manual Trigger:** Supports on-demand manual refresh via `POST /api/sync/refresh` and the interactive UI sync modal.
+
 ---
 
 ## 6. Technology Stack
@@ -215,6 +222,7 @@ SmartCart/
 ├── smartcart/
 │   ├── main.py              # FastAPI app, API routing, Open Food Facts integration
 │   ├── database.py          # SQLite schema, nationwide 3,524 store network & inventory
+│   ├── scheduler.py         # Automated background sync worker & weekly flyer scheduler
 │   ├── optimizer.py         # 3-Plan combinatorial route optimizer & fuel math
 │   ├── parser.py            # Natural language recipe parser and ingredient tokenization
 │   ├── normalizer.py        # Unit price normalizer ($/100g, $/100ml, $/kg)
@@ -225,7 +233,7 @@ SmartCart/
 │       ├── index.html       # Desktop terminal SPA with slide-over drawer & ZXing scanner
 │       └── manifest.json    # Web app manifest
 ├── tests/
-│   └── test_smartcart.py    # 20 automated unit tests (100% passing)
+│   └── test_smartcart.py    # 21 automated unit tests (100% passing)
 ├── Dockerfile               # Container deployment configuration
 ├── Procfile                 # Production web process definition
 ├── render.yaml              # Render cloud infrastructure blueprint

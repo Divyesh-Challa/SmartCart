@@ -231,6 +231,13 @@
             <span id="navCartCountBadge" class="absolute -top-1 -right-1 bg-sc-emerald text-sc-midnight font-black text-[11px] w-5 h-5 rounded-full flex items-center justify-center shadow-md">0</span>
           </button>
 
+          <!-- Live Store Sync Status Indicator -->
+          <button onclick="openSyncModal()" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all border border-white/10 cursor-pointer" title="Store Data Synchronization Status">
+            <span class="w-2 h-2 rounded-full bg-sc-emerald animate-pulse"></span>
+            <span id="navSyncBadgeText">3,524 Stores Live</span>
+            <i class="fa-solid fa-arrows-rotate text-[10px] text-sc-emerald ml-0.5"></i>
+          </button>
+
           <!-- Dark Mode Toggle -->
           <button id="themeToggleBtn" onclick="toggleDarkMode()" class="w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors" title="Toggle Appearance">
             <i class="fa-solid fa-moon text-sm" id="themeIcon"></i>
@@ -1720,6 +1727,71 @@
     </button>
   </div>
 
+  <!-- ============================================================== -->
+  <!-- 7. STORE DATA SYNC & UPDATE MODAL -->
+  <!-- ============================================================== -->
+  <div id="syncModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-sc-darksurface rounded-3xl max-w-lg w-full overflow-hidden border border-sc-border dark:border-sc-darkborder shadow-2xl p-6 sm:p-7 space-y-5">
+      <div class="flex items-start justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-emerald-500/20 text-sc-emerald flex items-center justify-center text-lg">
+            <i class="fa-solid fa-database"></i>
+          </div>
+          <div>
+            <h3 class="text-lg font-black text-sc-ink dark:text-white">Store Data Refresh & Sync</h3>
+            <p class="text-xs text-sc-muted dark:text-slate-400">Regularly updated across 3,524 Canadian supermarkets</p>
+          </div>
+        </div>
+        <button onclick="closeSyncModal()" class="w-8 h-8 rounded-full bg-sc-canvas dark:bg-white/10 text-sc-ink dark:text-white flex items-center justify-center hover:bg-sc-border transition-colors">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Sync Status Metrics -->
+      <div class="grid grid-cols-2 gap-3 p-4 rounded-2xl bg-sc-canvas dark:bg-sc-midnight text-xs">
+        <div>
+          <div class="text-[10px] uppercase font-bold text-sc-muted dark:text-slate-400">Indexed Stores</div>
+          <div id="modalSyncStoresCount" class="text-base font-black text-sc-ink dark:text-white mt-0.5">3,524 Stores</div>
+        </div>
+        <div>
+          <div class="text-[10px] uppercase font-bold text-sc-muted dark:text-slate-400">Inventory Rows</div>
+          <div id="modalSyncInventoryCount" class="text-base font-black text-sc-ink dark:text-white mt-0.5">84,576 Prices</div>
+        </div>
+        <div class="pt-2 border-t border-sc-border dark:border-sc-darkborder">
+          <div class="text-[10px] uppercase font-bold text-sc-muted dark:text-slate-400">Active Flyer Cycle</div>
+          <div id="modalSyncFlyerCycle" class="text-xs font-bold text-sc-emerald mt-0.5">Thu – Wed Weekly Cycle</div>
+        </div>
+        <div class="pt-2 border-t border-sc-border dark:border-sc-darkborder">
+          <div class="text-[10px] uppercase font-bold text-sc-muted dark:text-slate-400">Provincial Fuel Benchmark</div>
+          <div id="modalSyncGasPrices" class="text-xs font-bold text-sc-amber mt-0.5">$1.49 AB / $1.82 BC</div>
+        </div>
+      </div>
+
+      <!-- Auto-Update Engine Info -->
+      <div class="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-sc-ink dark:text-slate-300 space-y-1">
+        <div class="font-bold flex items-center gap-1.5 text-sc-emerald">
+          <i class="fa-solid fa-clock-rotate-left"></i>
+          <span>Automated Background Schedule:</span>
+        </div>
+        <p class="text-[11px] text-sc-muted dark:text-slate-400 leading-relaxed">
+          • <strong>Every 6 Hours:</strong> Automated background worker scans for fuel shifts and refreshes flyer deals.<br>
+          • <strong>Every Thursday:</strong> Weekly flyer reset rotates promotional circular discounts across all 35 banners.
+        </p>
+      </div>
+
+      <div class="text-[11px] text-sc-muted dark:text-slate-400 flex justify-between items-center px-1">
+        <span>Last synced: <strong id="modalSyncLastTime" class="text-sc-ink dark:text-white">Active</strong></span>
+        <span>Next: <strong id="modalSyncNextTime" class="text-sc-ink dark:text-white">in 6 hrs</strong></span>
+      </div>
+
+      <!-- Action Button -->
+      <button onclick="triggerManualSync()" id="btnManualSync" class="w-full py-3.5 rounded-2xl bg-sc-emerald hover:brightness-110 text-sc-midnight font-black text-xs flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.98]">
+        <i class="fa-solid fa-arrows-rotate" id="btnManualSyncIcon"></i>
+        <span>Refresh All Store Data Now</span>
+      </button>
+    </div>
+  </div>
+
 
   <!-- ============================================================== -->
   <!-- JAVASCRIPT STATE ENGINE & INTERACTIVE LOGIC -->
@@ -1788,6 +1860,7 @@
       loadGasPrice();
       renderBasket();
       renderMealPlan();
+      loadSyncStatus();
 
       const dateInput = document.getElementById('receiptDateInput');
       if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
@@ -1810,6 +1883,72 @@
       localStorage.setItem('sc_theme', isDark ? 'dark' : 'light');
       document.getElementById('themeIcon').className = isDark ? 'fa-solid fa-sun text-sm text-sc-amber' : 'fa-solid fa-moon text-sm';
       showToast(isDark ? 'Appearance set to Dark mode' : 'Appearance set to Light mode');
+    }
+
+    // --- STORE DATA SYNC ENGINE ---
+    async function loadSyncStatus() {
+      try {
+        const res = await fetch('/api/sync/status');
+        const data = await res.json();
+        AppState.syncStatus = data;
+        
+        const badge = document.getElementById('navSyncBadgeText');
+        if (badge && data.stores_indexed) {
+          badge.innerText = `${data.stores_indexed.toLocaleString()} Stores Live`;
+        }
+        
+        const sStores = document.getElementById('modalSyncStoresCount');
+        if (sStores && data.stores_indexed) sStores.innerText = `${data.stores_indexed.toLocaleString()} Stores`;
+
+        const sInv = document.getElementById('modalSyncInventoryCount');
+        if (sInv && data.inventory_rows) sInv.innerText = `${data.inventory_rows.toLocaleString()} Prices`;
+
+        const sCycle = document.getElementById('modalSyncFlyerCycle');
+        if (sCycle && data.flyer_cycle) sCycle.innerText = data.flyer_cycle.cycle_label;
+
+        const sGas = document.getElementById('modalSyncGasPrices');
+        if (sGas && data.gas_prices) sGas.innerText = `$${Number(data.gas_prices.Alberta || 1.49).toFixed(2)} AB / $${Number(data.gas_prices['British Columbia'] || 1.82).toFixed(2)} BC`;
+
+        const sLast = document.getElementById('modalSyncLastTime');
+        if (sLast && data.last_synced_at) sLast.innerText = data.last_synced_at;
+
+        const sNext = document.getElementById('modalSyncNextTime');
+        if (sNext && data.next_sync_at) sNext.innerText = data.next_sync_at;
+
+      } catch (e) {
+        console.warn('Sync status load notice:', e);
+      }
+    }
+
+    function openSyncModal() {
+      loadSyncStatus();
+      document.getElementById('syncModal').classList.remove('hidden');
+    }
+
+    function closeSyncModal() {
+      document.getElementById('syncModal').classList.add('hidden');
+    }
+
+    async function triggerManualSync() {
+      const btn = document.getElementById('btnManualSync');
+      const icon = document.getElementById('btnManualSyncIcon');
+      if (btn) btn.disabled = true;
+      if (icon) icon.classList.add('fa-spin');
+
+      try {
+        const res = await fetch('/api/sync/refresh', { method: 'POST' });
+        const data = await res.json();
+        showToast(`Synced ${data.stores_count.toLocaleString()} stores & updated ${data.inventory_promotions_updated} weekly flyer prices!`);
+        await loadSyncStatus();
+        setTimeout(() => {
+          closeSyncModal();
+        }, 1000);
+      } catch (e) {
+        showToast(`Sync failed: ${e.message}`);
+      } finally {
+        if (btn) btn.disabled = false;
+        if (icon) icon.classList.remove('fa-spin');
+      }
     }
 
     function toggleMobileMenu() {
@@ -3633,6 +3772,7 @@
       if (e.key === 'Escape') {
         closeBasketDrawer();
         closeProModal();
+        closeSyncModal();
         if (typeof closeFlyerModal === 'function') closeFlyerModal();
         if (typeof closeRecipeModal === 'function') closeRecipeModal();
         if (typeof closeMealPlanDayModal === 'function') closeMealPlanDayModal();

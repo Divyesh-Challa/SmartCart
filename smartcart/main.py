@@ -14,6 +14,7 @@ from pathlib import Path
 import os
 import base64
 import re
+import asyncio
 
 from smartcart.database import init_db, seed_edmonton_data, get_connection, haversine_distance_km
 from smartcart.parser import parse_recipe_text, parse_ingredient_line
@@ -28,6 +29,12 @@ from smartcart.flyers_service import (
     get_city_for_postal_code,
     SUPPORTED_REGIONS
 )
+from smartcart.scheduler import (
+    background_sync_worker,
+    perform_data_sync,
+    get_sync_status,
+    get_current_flyer_cycle
+)
 
 app = FastAPI(
     title="SmartCart API",
@@ -36,9 +43,14 @@ app = FastAPI(
 )
 
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
     init_db()
     seed_edmonton_data()
+    try:
+        perform_data_sync()
+    except Exception as e:
+        print(f"[SmartCart] Initial sync notice: {e}")
+    asyncio.create_task(background_sync_worker())
 
 class ParseRecipeRequest(BaseModel):
     recipe_text: Optional[str] = Field(None, description="Unstructured recipe or natural language grocery list text")
@@ -1008,7 +1020,38 @@ def compare_prices(req: ComparisonRequest):
             "prices": row_prices
         })
 
-    return {"matrix": matrix}
+@app.get("/api/sync/status")
+def sync_status_endpoint():
+    """
+    Returns live synchronization status, last updated timestamp,
+    next scheduled sync, active Canadian store count, and current flyer cycle.
+    """
+    return get_sync_status()
+
+@app.post("/api/sync/refresh")
+def sync_refresh_endpoint():
+    """
+    Triggers an on-demand update of stores, weekly flyer promotions,
+    inventory prices, and live provincial fuel benchmarks.
+    """
+    return perform_data_sync()
+
+@app.get("/api/sync/history")
+def sync_history_endpoint(limit: int = 10):
+    """
+    Returns audit logs of previous synchronization cycles.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, synced_at, stores_count, inventory_rows_count, flyer_deals_count,
+               gas_price_ab, gas_price_bc, flyer_cycle_label, status, details, next_sync_at
+        FROM sync_history
+        ORDER BY id DESC LIMIT ?
+    """, (limit,))
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return {"history": rows}
 
 STATIC_DIR = Path(__file__).parent / "static"
 if STATIC_DIR.exists():
