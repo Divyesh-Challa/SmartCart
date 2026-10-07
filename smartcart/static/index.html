@@ -212,9 +212,10 @@
         </div>
 
         <!-- Desktop Navigation Links -->
-        <nav class="hidden xl:flex items-center gap-6 lg:gap-7 flex-shrink-0 ml-auto">
+        <nav class="hidden xl:flex items-center gap-5 lg:gap-6 flex-shrink-0 ml-auto">
           <a href="#flyersSection" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap nav-tab-link">Weekly Flyers</a>
           <a href="#recipesSection" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap nav-tab-link">Flyer Dinners</a>
+          <a href="#compareSection" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap nav-tab-link"><i class="fa-solid fa-scale-balanced text-sc-emerald mr-1"></i>Price Compare</a>
           <a href="#mealPlannerSection" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap nav-tab-link">Meal Planner</a>
           <a href="#shoppingListSection" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap nav-tab-link">Smart List</a>
           <a href="#scannerSection" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap nav-tab-link">SmartScan Lens</a>
@@ -262,6 +263,7 @@
     <div id="mobileNavDrawer" class="hidden xl:hidden bg-sc-midnight border-t border-white/10 px-4 pt-3 pb-6 space-y-2">
       <a href="#flyersSection" onclick="toggleMobileMenu()" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">Weekly Flyers</a>
       <a href="#recipesSection" onclick="toggleMobileMenu()" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">Flyer Dinners</a>
+      <a href="#compareSection" onclick="toggleMobileMenu()" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">Price Compare</a>
       <a href="#mealPlannerSection" onclick="toggleMobileMenu()" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">Meal Planner (Thu–Wed)</a>
       <a href="#shoppingListSection" onclick="toggleMobileMenu()" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">Smart List</a>
       <a href="#scannerSection" onclick="toggleMobileMenu()" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">SmartScan Barcode Lens</a>
@@ -698,6 +700,59 @@
       <!-- Recipes Grid Container -->
       <div id="recipesGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <!-- Loaded via JS dynamically -->
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- FEATURE: MULTI-STORE PRICE COMPARISON SEARCH -->
+  <!-- ============================================================== -->
+  <section id="compareSection" class="py-14 sm:py-20 bg-sc-canvas dark:bg-sc-midnight border-b border-sc-border dark:border-sc-darkborder">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-8">
+        <div>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold uppercase tracking-wider border border-emerald-500/20">
+            <i class="fa-solid fa-scale-balanced text-sc-emerald"></i> Real-Time Price Matrix
+          </span>
+          <h2 class="mt-2 text-3xl sm:text-4xl font-black text-sc-ink dark:text-white tracking-tight">
+            Multi-Store Price Comparison Search
+          </h2>
+          <p class="mt-2 text-sc-muted dark:text-slate-400 text-sm sm:text-base max-w-2xl">
+            Compare prices for any grocery item across all tracked Canadian supermarkets with normalized unit prices ($/100g, $/100ml) and live flyer deal annotations.
+          </p>
+        </div>
+
+        <!-- Quick Staple Pill Suggestions -->
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <span class="text-xs font-bold text-sc-muted dark:text-slate-400 uppercase mr-1">Staples:</span>
+          <button onclick="executeMultiStoreSearch('chicken')" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder hover:bg-sc-emerald hover:text-sc-midnight transition-colors">Chicken</button>
+          <button onclick="executeMultiStoreSearch('milk')" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder hover:bg-sc-emerald hover:text-sc-midnight transition-colors">Milk</button>
+          <button onclick="executeMultiStoreSearch('butter')" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder hover:bg-sc-emerald hover:text-sc-midnight transition-colors">Butter</button>
+          <button onclick="executeMultiStoreSearch('eggs')" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder hover:bg-sc-emerald hover:text-sc-midnight transition-colors">Eggs</button>
+          <button onclick="executeMultiStoreSearch('oats')" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder hover:bg-sc-emerald hover:text-sc-midnight transition-colors">Oats</button>
+          <button onclick="executeMultiStoreSearch('salmon')" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder hover:bg-sc-emerald hover:text-sc-midnight transition-colors">Salmon</button>
+        </div>
+      </div>
+
+      <!-- Search Input Container -->
+      <div class="p-4 sm:p-5 rounded-3xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder mb-8 shadow-sm">
+        <div class="flex flex-col sm:flex-row gap-3 items-center">
+          <div class="relative flex-1 w-full">
+            <i class="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-slate-400 text-sm"></i>
+            <input type="text" id="compareSearchInput" onkeydown="if(event.key==='Enter') executeMultiStoreSearch()" placeholder="Search across Canadian supermarkets (e.g. Boneless Chicken Breasts, 2% Milk, Basmati Rice)..." class="w-full pl-11 pr-4 py-3 rounded-2xl bg-sc-canvas dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder text-sm text-sc-ink dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-sc-emerald">
+          </div>
+          <button onclick="executeMultiStoreSearch()" class="w-full sm:w-auto px-7 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:brightness-110 text-white font-bold text-sm shadow-md transition-all active:scale-95 whitespace-nowrap flex items-center justify-center gap-2">
+            <i class="fa-solid fa-scale-balanced"></i>
+            <span>Compare Stores</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Results Grid / Comparison Matrix Cards -->
+      <div id="compareResultsContainer" class="space-y-6">
+        <!-- Loaded dynamically -->
       </div>
 
     </div>
@@ -1640,6 +1695,125 @@
     </div>
   </div>
 
+  <!-- 7. VERIFIED PRODUCT BARCODE PREVIEW MODAL -->
+  <div id="verifiedBarcodeModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-sc-darksurface rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden border border-sc-border dark:border-sc-darkborder shadow-2xl flex flex-col">
+      <!-- Modal Header -->
+      <div class="p-5 border-b border-sc-border dark:border-sc-darkborder flex items-center justify-between bg-sc-canvas dark:bg-sc-midnight flex-shrink-0">
+        <div class="flex items-center gap-2.5">
+          <span class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-sm font-bold">
+            <i class="fa-solid fa-barcode"></i>
+          </span>
+          <div>
+            <h3 class="font-black text-base sm:text-lg text-sc-ink dark:text-white">Verified Canadian Product Scan</h3>
+            <span id="verifiedModalBarcodeTag" class="text-[11px] text-sc-muted dark:text-slate-400 font-mono">UPC: 000000000000</span>
+          </div>
+        </div>
+        <button onclick="closeVerifiedBarcodeModal()" class="w-8 h-8 rounded-full bg-slate-200 dark:bg-white/10 text-sc-ink dark:text-white flex items-center justify-center hover:bg-slate-300 transition-colors">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-6 overflow-y-auto space-y-5 flex-1">
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-5 items-center">
+          <!-- Product Image & Nutri-Score -->
+          <div class="sm:col-span-5 relative text-center">
+            <div class="w-full aspect-square rounded-2xl bg-sc-canvas dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder p-3 flex items-center justify-center overflow-hidden">
+              <img id="verifiedModalImg" src="" alt="Product Image" class="max-h-full max-w-full object-contain drop-shadow-md">
+            </div>
+            <div class="mt-2.5 flex items-center justify-center gap-2">
+              <span id="verifiedModalNutriScore" class="px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-black text-xs">
+                Nutri-Score A
+              </span>
+              <span id="verifiedModalCategory" class="px-2.5 py-0.5 rounded-full bg-sc-canvas dark:bg-white/10 text-sc-ink dark:text-slate-300 text-xs font-semibold">
+                Grocery
+              </span>
+            </div>
+          </div>
+
+          <!-- Product Details & Nutrition Macros -->
+          <div class="sm:col-span-7 space-y-3">
+            <div>
+              <span id="verifiedModalBrand" class="text-xs font-bold uppercase tracking-wider text-sc-emerald">Canadian Grocer</span>
+              <h4 id="verifiedModalTitle" class="text-xl font-black text-sc-ink dark:text-white leading-tight">Product Title</h4>
+              <p id="verifiedModalSize" class="text-xs text-sc-muted dark:text-slate-400 mt-0.5 font-medium">1 unit</p>
+            </div>
+
+            <!-- Macros Ribbon -->
+            <div class="grid grid-cols-4 gap-1.5 p-2.5 rounded-2xl bg-sc-canvas dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder text-center text-xs">
+              <div>
+                <div id="verifiedModalCals" class="font-black text-sc-ink dark:text-white tabular-nums">150</div>
+                <div class="text-[10px] text-sc-muted dark:text-slate-400 font-semibold">Cals</div>
+              </div>
+              <div>
+                <div id="verifiedModalProt" class="font-black text-sc-ink dark:text-white tabular-nums">4g</div>
+                <div class="text-[10px] text-sc-muted dark:text-slate-400 font-semibold">Protein</div>
+              </div>
+              <div>
+                <div id="verifiedModalCarbs" class="font-black text-sc-ink dark:text-white tabular-nums">20g</div>
+                <div class="text-[10px] text-sc-muted dark:text-slate-400 font-semibold">Carbs</div>
+              </div>
+              <div>
+                <div id="verifiedModalFat" class="font-black text-sc-ink dark:text-white tabular-nums">3g</div>
+                <div class="text-[10px] text-sc-muted dark:text-slate-400 font-semibold">Fat</div>
+              </div>
+            </div>
+
+            <!-- Best Deal Banner -->
+            <div id="verifiedModalBestDealBanner" class="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between">
+              <div>
+                <span class="text-[10px] font-black uppercase tracking-wider text-emerald-500">Best Current Price</span>
+                <div id="verifiedModalBestStore" class="font-black text-sm text-sc-ink dark:text-white">No Frills</div>
+              </div>
+              <div class="text-right">
+                <span id="verifiedModalBestPrice" class="text-xl font-black text-sc-emerald tabular-nums">$3.99</span>
+                <div id="verifiedModalSavings" class="text-[11px] text-emerald-400 font-bold">Save $1.50 (27% OFF)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cross-Store Pricing Matrix -->
+        <div class="space-y-2">
+          <span class="text-xs font-black uppercase tracking-wider text-sc-muted dark:text-slate-400">Prices Across Nearby Canadian Stores:</span>
+          <div id="verifiedModalStorePricesList" class="space-y-2 max-h-44 overflow-y-auto pr-1">
+            <!-- Dynamic store pricing rows -->
+          </div>
+        </div>
+
+        <!-- Stepper and Store Selection -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-sc-border dark:border-sc-darkborder">
+          <div>
+            <label class="block text-xs font-bold text-sc-muted dark:text-slate-400 mb-1">Target Supermarket:</label>
+            <select id="verifiedModalStoreSelect" class="w-full px-3 py-2 rounded-xl bg-sc-canvas dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder text-xs font-bold text-sc-ink dark:text-white outline-none">
+              <!-- Dynamically populated options -->
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-sc-muted dark:text-slate-400 mb-1">Quantity:</label>
+            <div class="flex items-center gap-2">
+              <button onclick="updateVerifiedModalQty(-1)" class="w-8 h-8 rounded-xl bg-sc-canvas dark:bg-white/10 text-sc-ink dark:text-white font-bold flex items-center justify-center hover:bg-slate-200 dark:hover:bg-white/20">-</button>
+              <span id="verifiedModalQtyVal" class="flex-1 text-center font-black text-sm text-sc-ink dark:text-white tabular-nums">1</span>
+              <button onclick="updateVerifiedModalQty(1)" class="w-8 h-8 rounded-xl bg-sc-canvas dark:bg-white/10 text-sc-ink dark:text-white font-bold flex items-center justify-center hover:bg-slate-200 dark:hover:bg-white/20">+</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-5 border-t border-sc-border dark:border-sc-darkborder bg-sc-canvas dark:bg-sc-midnight flex items-center justify-between gap-3 flex-shrink-0">
+        <button onclick="closeVerifiedBarcodeModal()" class="px-5 py-2.5 rounded-xl bg-white dark:bg-white/10 text-sc-ink dark:text-white font-bold text-xs hover:bg-slate-200 dark:hover:bg-white/20 transition-colors">
+          Cancel
+        </button>
+        <button onclick="confirmAddVerifiedBarcodeToBasket()" class="flex-1 py-3 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:brightness-110 text-white font-black text-xs sm:text-sm shadow-lg shadow-emerald-500/20 transition-all active:scale-95 flex items-center justify-center gap-2">
+          <i class="fa-solid fa-check"></i>
+          <span>Confirm & Add to Basket</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============================================================== -->
   <!-- BASKET SLIDE-OVER DRAWER -->
   <!-- ============================================================== -->
@@ -1861,6 +2035,7 @@
       renderBasket();
       renderMealPlan();
       loadSyncStatus();
+      executeMultiStoreSearch('chicken');
 
       const dateInput = document.getElementById('receiptDateInput');
       if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
@@ -2401,16 +2576,17 @@
       showToast(`Clipped all ${added} flyer deals into your SmartCart basket!`);
     }
 
-    // --- FEATURE 1: RECIPES ENGINE ---
+    // --- FEATURE 1: RECIPES ENGINE (FLYER-GROUNDED) ---
     async function loadRecipes() {
       try {
-        const res = await fetch('/api/recipes/dinner-deals');
-        const data = await res.json();
-        AppState.recipes = data.recipes || [];
+        const city = AppState.selectedCity || 'Edmonton';
+        const res = await fetch(`/api/v1/recipes/flyer-grounded?city=${encodeURIComponent(city)}`);
+        const json = await res.json();
+        AppState.recipes = json.data || json.recipes || [];
         renderRecipes();
         renderHeroDinners();
       } catch (e) {
-        console.error('Failed to load recipes', e);
+        console.error('Failed to load flyer-grounded recipes', e);
       }
     }
 
@@ -2419,7 +2595,7 @@
       let filtered = AppState.recipes;
 
       if (AppState.currentRecipeBanner !== 'all') {
-        filtered = filtered.filter(r => r.banner.toLowerCase() === AppState.currentRecipeBanner.toLowerCase());
+        filtered = filtered.filter(r => (r.banner || '').toLowerCase() === AppState.currentRecipeBanner.toLowerCase());
       }
       if (AppState.currentRecipeCategory !== 'all') {
         filtered = filtered.filter(r => (r.category || '').toLowerCase().includes(AppState.currentRecipeCategory.toLowerCase()));
@@ -2434,15 +2610,24 @@
         return;
       }
 
-      grid.innerHTML = filtered.map(r => `
-        <div class="sc-card rounded-3xl bg-sc-canvas dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder overflow-hidden flex flex-col justify-between shadow-sm">
+      grid.innerHTML = filtered.map(r => {
+        const saleIngs = (r.ingredients || []).filter(i => i.is_on_sale);
+        const saleIngTags = saleIngs.map(i => `
+          <div class="flex items-center justify-between text-[11px] p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-sc-ink dark:text-emerald-300">
+            <span class="font-bold truncate"><i class="fa-solid fa-tag mr-1 text-emerald-500"></i>${i.name}</span>
+            <span class="font-black text-emerald-600 dark:text-emerald-400 tabular-nums ml-1 whitespace-nowrap">$${i.sale_price.toFixed(2)} (${i.store_name})</span>
+          </div>
+        `).join('');
+
+        return `
+        <div class="sc-card rounded-3xl bg-sc-canvas dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder overflow-hidden flex flex-col justify-between shadow-sm hover:border-sc-emerald transition-all">
           <div class="p-5 space-y-3">
             <div class="flex items-center justify-between">
               <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${getBannerColorClass(r.banner)}">
-                ${r.banner}
+                ${r.banner} Flyer
               </span>
-              <span class="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold">
-                Save ${r.savings_percent}%
+              <span class="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[10px] font-black">
+                Save $${(r.total_savings || 0).toFixed(2)} (${r.savings_percent || 30}%)
               </span>
             </div>
 
@@ -2451,13 +2636,21 @@
               <p class="text-xs text-sc-muted dark:text-slate-400 line-clamp-2 mt-1">${r.description}</p>
             </div>
 
+            <!-- Sale Ingredients Breakdown -->
+            <div class="space-y-1 pt-1">
+              <span class="text-[10px] font-bold text-sc-muted dark:text-slate-400 uppercase tracking-wider">Flyer Deal Ingredients:</span>
+              <div class="space-y-1">
+                ${saleIngTags || '<div class="text-[11px] text-sc-muted">Staple pantry dinner ingredients</div>'}
+              </div>
+            </div>
+
             <div class="pt-2 border-t border-sc-border dark:border-sc-darkborder flex items-baseline justify-between">
               <div>
-                <span class="text-2xl font-black text-sc-emerald tabular-nums">$${r.cost_per_serving.toFixed(2)}</span>
+                <span class="text-2xl font-black text-sc-emerald tabular-nums">$${(r.cost_per_serving || 2.99).toFixed(2)}</span>
                 <span class="text-[11px] text-sc-muted dark:text-slate-400 font-semibold"> / plate</span>
               </div>
               <div class="text-[11px] text-sc-muted dark:text-slate-400 font-semibold">
-                ${r.servings} Portions • Total $${r.total_sale_cost.toFixed(2)}
+                ${r.servings || 4} Portions • Sale $${(r.total_sale_cost || 11.99).toFixed(2)} <span class="line-through text-slate-400">($${(r.total_regular_cost || 16.99).toFixed(2)})</span>
               </div>
             </div>
           </div>
@@ -2466,15 +2659,16 @@
             <button onclick="openRecipeModal(${r.id})" class="flex-1 py-2 px-3 rounded-xl bg-sc-canvas dark:bg-sc-midnight hover:bg-sc-border text-sc-ink dark:text-white font-bold text-xs transition-colors text-center">
               View
             </button>
-            <button onclick="openMealPlanDayModal(${r.id}, '${r.title.replace(/'/g, "\\'")}', ${r.cost_per_serving})" class="p-2 w-9 h-9 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-sc-amber font-bold flex items-center justify-center transition-colors" title="Schedule in Meal Plan">
+            <button onclick="openMealPlanDayModal(${r.id}, '${r.title.replace(/'/g, "\\'")}', ${r.cost_per_serving || 2.99})" class="p-2 w-9 h-9 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-sc-amber font-bold flex items-center justify-center transition-colors" title="Schedule in Meal Plan">
               <i class="fa-solid fa-calendar-plus text-xs"></i>
             </button>
-            <button onclick="addRecipeDirectlyToBasket(${r.id})" class="p-2 w-9 h-9 rounded-xl bg-sc-emerald hover:brightness-110 text-sc-midnight font-bold flex items-center justify-center transition-colors shadow-sm" title="Add Ingredients to List">
+            <button onclick="addRecipeDirectlyToBasket(${r.id})" class="p-2 w-9 h-9 rounded-xl bg-sc-emerald hover:brightness-110 text-sc-midnight font-bold flex items-center justify-center transition-colors shadow-sm" title="Clip All Deals to Basket">
               <i class="fa-solid fa-cart-plus text-xs"></i>
             </button>
           </div>
         </div>
-      `).join('');
+      `;
+      }).join('');
     }
 
     function setRecipeCategoryFilter(cat) {
@@ -2515,20 +2709,23 @@
       document.getElementById('modalRecipeBannerBadge').innerText = recipe.banner;
       document.getElementById('modalRecipeTitle').innerText = recipe.title;
       document.getElementById('modalRecipeDesc').innerText = recipe.description;
-      document.getElementById('modalRecipeCostPlate').innerText = `$${recipe.cost_per_serving.toFixed(2)}`;
-      document.getElementById('modalRecipeServings').innerText = recipe.servings;
-      document.getElementById('modalRecipePrepTime').innerText = `${recipe.prep_time_minutes}m`;
+      document.getElementById('modalRecipeCostPlate').innerText = `$${(recipe.cost_per_serving || 2.99).toFixed(2)}`;
+      document.getElementById('modalRecipeServings').innerText = recipe.servings || 4;
+      document.getElementById('modalRecipePrepTime').innerText = `${recipe.prep_time_minutes || 30}m`;
 
       const ingList = document.getElementById('modalRecipeIngredientsList');
       ingList.innerHTML = (recipe.ingredients || []).map(ing => `
         <div class="p-2.5 rounded-xl bg-sc-canvas dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder flex items-center justify-between text-xs">
           <div>
-            <span class="font-bold text-sc-ink dark:text-white">${ing.name}</span>
-            <span class="text-sc-muted dark:text-slate-400"> (${ing.package_size || ing.brand})</span>
+            <div class="flex items-center gap-1.5">
+              <span class="font-bold text-sc-ink dark:text-white">${ing.name}</span>
+              ${ing.is_on_sale ? `<span class="px-1.5 py-0.2 rounded-md bg-emerald-500/20 text-emerald-400 font-black text-[9px]">Sale at ${ing.store_name}</span>` : ''}
+            </div>
+            <span class="text-sc-muted dark:text-slate-400"> (${ing.package_size || ing.brand || '1 unit'})</span>
           </div>
           <div class="flex items-center gap-2">
-            <span class="text-slate-400 line-through tabular-nums">$${ing.regular_price.toFixed(2)}</span>
-            <span class="font-black text-sc-emerald tabular-nums">$${ing.sale_price.toFixed(2)}</span>
+            <span class="text-slate-400 line-through tabular-nums">$${(ing.regular_price || 0).toFixed(2)}</span>
+            <span class="font-black text-sc-emerald tabular-nums">$${(ing.sale_price || 0).toFixed(2)}</span>
           </div>
         </div>
       `).join('');
@@ -2547,7 +2744,7 @@
       };
       document.getElementById('modalBtnAddPlan').onclick = () => {
         closeRecipeModal();
-        openMealPlanDayModal(recipe.id, recipe.title, recipe.cost_per_serving);
+        openMealPlanDayModal(recipe.id, recipe.title, recipe.cost_per_serving || 2.99);
       };
 
       document.getElementById('recipeDetailModal').classList.remove('hidden');
@@ -2555,6 +2752,123 @@
 
     function closeRecipeModal() {
       document.getElementById('recipeDetailModal').classList.add('hidden');
+    }
+
+    // --- MULTI-STORE PRICE COMPARISON SEARCH ENGINE ---
+    async function executeMultiStoreSearch(explicitTerm) {
+      const input = document.getElementById('compareSearchInput');
+      const term = explicitTerm || (input ? input.value.trim() : '') || 'chicken';
+      if (input) input.value = term;
+
+      const container = document.getElementById('compareResultsContainer');
+      if (!container) return;
+
+      container.innerHTML = `
+        <div class="text-center py-12 space-y-3">
+          <i class="fa-solid fa-circle-notch fa-spin text-3xl text-sc-emerald"></i>
+          <p class="font-bold text-sm text-sc-ink dark:text-white">Comparing supermarket prices across Canadian stores for "${term}"...</p>
+        </div>
+      `;
+
+      try {
+        const res = await fetch(`/api/v1/search/compare?q=${encodeURIComponent(term)}&city=${encodeURIComponent(AppState.selectedCity || 'Edmonton')}`);
+        const data = await res.json();
+        const results = data.data || [];
+
+        if (results.length === 0) {
+          container.innerHTML = `
+            <div class="text-center py-12 rounded-3xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder p-8">
+              <i class="fa-solid fa-store-slash text-3xl text-sc-muted dark:text-slate-500 mb-3"></i>
+              <h4 class="font-black text-base text-sc-ink dark:text-white">No cross-store matches found for "${term}"</h4>
+              <p class="text-xs text-sc-muted dark:text-slate-400 mt-1">Try common grocery staples like chicken, milk, butter, oats, or eggs.</p>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = results.map(prod => `
+          <div class="rounded-3xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder shadow-sm overflow-hidden transition-all hover:border-sc-emerald/40">
+            <!-- Product Header Bar -->
+            <div class="p-4 sm:p-5 border-b border-sc-border dark:border-sc-darkborder bg-sc-canvas/50 dark:bg-sc-midnight/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded-full bg-sc-navy/10 dark:bg-white/10 text-sc-navy dark:text-slate-200 font-bold text-[10px] uppercase">
+                    ${prod.category || 'Grocery'}
+                  </span>
+                  <span class="text-xs text-sc-muted dark:text-slate-400 font-medium">${prod.brand} • ${prod.standard_package}</span>
+                </div>
+                <h3 class="text-lg sm:text-xl font-black text-sc-ink dark:text-white mt-1">${prod.name}</h3>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="px-3 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-black text-xs">
+                  <i class="fa-solid fa-award mr-1"></i> Lowest: $${prod.lowest_price.toFixed(2)} at ${prod.lowest_store.split(' ')[0]}
+                </span>
+              </div>
+            </div>
+
+            <!-- Stores Price Matrix Table -->
+            <div class="divide-y divide-sc-border dark:divide-sc-darkborder">
+              ${prod.stores.map(st => `
+                <div class="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-sc-canvas/40 dark:hover:bg-white/5 transition-colors ${st.is_lowest ? 'bg-emerald-500/[0.04]' : ''}">
+                  <!-- Store Brand & Deal info -->
+                  <div class="flex items-center gap-3">
+                    <span class="w-8 h-8 rounded-xl ${getBannerColorClass(st.banner)} font-black text-[11px] flex items-center justify-center flex-shrink-0 shadow-sm">
+                      ${st.banner.substring(0, 2).toUpperCase()}
+                    </span>
+                    <div>
+                      <div class="flex items-center gap-2">
+                        <span class="font-black text-sm text-sc-ink dark:text-white">${st.store_name}</span>
+                        ${st.is_lowest ? '<span class="px-1.5 py-0.5 rounded-md bg-emerald-500 text-sc-midnight font-black text-[9px] uppercase tracking-wider">Best Deal</span>' : ''}
+                        ${st.is_on_sale ? `<span class="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-500 font-black text-[9px]"><i class="fa-solid fa-tag mr-0.5"></i>${st.flyer_deal ? st.flyer_deal.discount_text : 'Flyer Deal'}</span>` : ''}
+                      </div>
+                      <div class="text-[11px] text-sc-muted dark:text-slate-400 font-medium">
+                        ${st.item_title} • <span class="font-bold text-sc-ink dark:text-slate-300">${st.unit_price_display}</span>
+                        ${st.flyer_deal && st.flyer_deal.valid_until ? `• Valid to ${st.flyer_deal.valid_until}` : ''}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Price & Quick Add Button -->
+                  <div class="flex items-center justify-between sm:justify-end gap-4 ml-11 sm:ml-0">
+                    <div class="text-right">
+                      <div class="text-lg sm:text-xl font-black ${st.is_lowest ? 'text-sc-emerald' : 'text-sc-ink dark:text-white'} tabular-nums">
+                        $${st.price.toFixed(2)}
+                      </div>
+                      <div class="text-[10px] text-sc-muted dark:text-slate-400">${st.unit_price_display}</div>
+                    </div>
+                    <button onclick="addComparisonStoreItemToBasket('${st.item_title.replace(/'/g, "\\'")}', '${st.brand.replace(/'/g, "\\'")}', '${st.package_size}', '${prod.category}', ${st.price}, '${st.store_name.replace(/'/g, "\\'")}', ${st.is_on_sale})" class="px-3.5 py-2 rounded-xl ${st.is_lowest ? 'bg-sc-emerald hover:brightness-110 text-sc-midnight' : 'bg-sc-canvas dark:bg-white/10 hover:bg-sc-border dark:hover:bg-white/20 text-sc-ink dark:text-white'} font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95">
+                      <i class="fa-solid fa-cart-plus text-xs"></i>
+                      <span>Add Deal</span>
+                    </button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error('Failed to execute multi-store comparison', err);
+        container.innerHTML = `<div class="p-4 text-center text-red-500 font-bold">Failed to load price comparison. Please try again.</div>`;
+      }
+    }
+
+    function addComparisonStoreItemToBasket(name, brand, packageSize, category, price, storeName, isOnSale) {
+      const regPrice = isOnSale ? Math.round(price * 1.25 * 100) / 100 : price;
+      AppState.basket.push({
+        name: name,
+        brand: brand || 'Store Brand',
+        package_size: packageSize || '1 unit',
+        category: category || 'Pantry',
+        price: price,
+        reg_price: regPrice,
+        banner: storeName,
+        quantity: 1,
+        checked: false,
+        isPantry: false
+      });
+      localStorage.setItem('sc_basket', JSON.stringify(AppState.basket));
+      renderBasket();
+      showToast(`Added ${name} from ${storeName} ($${price.toFixed(2)}) to basket!`);
     }
 
     // --- FEATURE 2: FLYERS & DEALS ENGINE ---
@@ -2974,9 +3288,9 @@
           brand: ing.brand || 'Flyer Item',
           package_size: ing.package_size || 'unit',
           category: ing.category || 'Pantry',
-          price: ing.sale_price,
-          reg_price: ing.regular_price,
-          banner: recipe.banner,
+          price: ing.sale_price !== undefined ? ing.sale_price : 0,
+          reg_price: ing.regular_price !== undefined ? ing.regular_price : ing.sale_price,
+          banner: ing.store_name || recipe.banner || 'No Frills',
           recipeName: recipe.title,
           quantity: 1,
           checked: false,
@@ -3196,14 +3510,27 @@
       }
     }
 
-    function triggerBarcodeScan(code) {
-      document.getElementById('manualBarcodeInput').value = code;
-      executeBarcodeLookup();
+    function normalizeBarcode(raw) {
+      if (!raw) return '';
+      let clean = String(raw).trim().replace(/[^a-zA-Z0-9]/g, '');
+      if (clean.length === 13 && clean.startsWith('0') && /^\d+$/.test(clean)) {
+        return clean.substring(1);
+      }
+      return clean;
     }
 
-    async function executeBarcodeLookup() {
-      const code = document.getElementById('manualBarcodeInput').value.trim();
+    function triggerBarcodeScan(code) {
+      const norm = normalizeBarcode(code);
+      document.getElementById('manualBarcodeInput').value = norm;
+      executeBarcodeLookup(norm);
+    }
+
+    async function executeBarcodeLookup(explicitCode) {
+      const raw = explicitCode || document.getElementById('manualBarcodeInput').value.trim();
+      const code = normalizeBarcode(raw);
       if (!code) return;
+
+      document.getElementById('manualBarcodeInput').value = code;
 
       const container = document.getElementById('scannerResultContainer');
       container.innerHTML = `
@@ -3213,12 +3540,161 @@
         </div>`;
 
       try {
-        const res = await fetch(`/api/barcode/lookup?barcode=${encodeURIComponent(code)}`);
-        const data = await res.json();
+        const res = await fetch(`/api/v1/barcodes/resolve/${encodeURIComponent(code)}`);
+        if (res.status === 400 || res.status === 404) {
+          const errData = await res.json().catch(() => ({}));
+          renderBarcodeResult({ found: false, message: errData.detail || 'Barcode not found in Canadian index.' });
+          return;
+        }
+        const envelope = await res.json();
+        const data = envelope.data || envelope;
         renderBarcodeResult(data);
+        if (data.found !== false) {
+          openVerifiedBarcodeModal(data);
+        }
       } catch (e) {
         container.innerHTML = `<div class="p-4 text-red-500 font-bold text-center">Failed to scan barcode: ${e.message}</div>`;
       }
+    }
+
+    function openVerifiedBarcodeModal(data) {
+      AppState.verifiedBarcodeProduct = data;
+      AppState.verifiedBarcodeQty = 1;
+
+      const barcodeElem = document.getElementById('verifiedModalBarcodeTag');
+      if (barcodeElem) barcodeElem.innerText = `UPC: ${data.barcode || 'N/A'}`;
+
+      const img = document.getElementById('verifiedModalImg');
+      if (img) {
+        img.src = data.image_url || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop';
+      }
+
+      const nut = data.nutrition || {};
+      const scoreElem = document.getElementById('verifiedModalNutriScore');
+      if (scoreElem) scoreElem.innerText = `Nutri-Score ${(nut.nutri_score || 'A').toUpperCase()}`;
+
+      const catElem = document.getElementById('verifiedModalCategory');
+      if (catElem) catElem.innerText = data.category || 'Grocery';
+
+      const brandElem = document.getElementById('verifiedModalBrand');
+      if (brandElem) brandElem.innerText = data.brand || 'Canadian Grocer';
+
+      const titleElem = document.getElementById('verifiedModalTitle');
+      if (titleElem) titleElem.innerText = data.name || 'Verified Canadian Product';
+
+      const sizeElem = document.getElementById('verifiedModalSize');
+      if (sizeElem) sizeElem.innerText = data.package_size || '1 unit';
+
+      const calsElem = document.getElementById('verifiedModalCals');
+      if (calsElem) calsElem.innerText = nut.calories !== undefined ? nut.calories : 150;
+
+      const protElem = document.getElementById('verifiedModalProt');
+      if (protElem) protElem.innerText = nut.protein_g !== undefined ? `${nut.protein_g}g` : '4g';
+
+      const carbsElem = document.getElementById('verifiedModalCarbs');
+      if (carbsElem) carbsElem.innerText = nut.carbs_g !== undefined ? `${nut.carbs_g}g` : '20g';
+
+      const fatElem = document.getElementById('verifiedModalFat');
+      if (fatElem) fatElem.innerText = nut.fat_g !== undefined ? `${nut.fat_g}g` : '3g';
+
+      const prices = data.store_prices || [];
+      const bestStore = prices.find(p => p.is_lowest) || prices[0] || { banner: data.banner || 'Supermarket', price: data.sale_price || 3.99 };
+      const bestStoreElem = document.getElementById('verifiedModalBestStore');
+      if (bestStoreElem) bestStoreElem.innerText = bestStore.store_name || bestStore.banner;
+
+      const bestPriceElem = document.getElementById('verifiedModalBestPrice');
+      if (bestPriceElem) bestPriceElem.innerText = `$${Number(bestStore.price || data.sale_price || 0).toFixed(2)}`;
+
+      const savingsElem = document.getElementById('verifiedModalSavings');
+      if (savingsElem) {
+        if (data.savings_percent && data.regular_price > data.sale_price) {
+          savingsElem.innerText = `Save $${(data.regular_price - data.sale_price).toFixed(2)} (${data.savings_percent}% OFF)`;
+        } else {
+          savingsElem.innerText = 'Standard Retail Price';
+        }
+      }
+
+      const list = document.getElementById('verifiedModalStorePricesList');
+      if (list) {
+        if (prices.length > 0) {
+          list.innerHTML = prices.map(sp => `
+            <div class="p-2.5 rounded-xl ${sp.is_lowest ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-sc-canvas dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder'} flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full ${sp.is_lowest ? 'bg-emerald-500' : 'bg-slate-400'}"></span>
+                <span class="font-bold text-sc-ink dark:text-white">${sp.store_name || sp.banner}</span>
+                ${sp.is_lowest ? '<span class="px-1.5 py-0.5 rounded-md bg-emerald-500 text-sc-midnight font-black text-[9px]">LOWEST</span>' : ''}
+                ${sp.is_sale ? '<span class="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-500 font-black text-[9px]">SALE</span>' : ''}
+              </div>
+              <span class="font-black text-sm text-sc-ink dark:text-white tabular-nums">$${Number(sp.price).toFixed(2)}</span>
+            </div>
+          `).join('');
+        } else {
+          list.innerHTML = `
+            <div class="p-2.5 rounded-xl bg-sc-canvas dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder flex items-center justify-between text-xs">
+              <span class="font-bold text-sc-ink dark:text-white">${data.banner || 'Canadian Retail Index'}</span>
+              <span class="font-black text-sm text-sc-ink dark:text-white tabular-nums">$${Number(data.sale_price || 0).toFixed(2)}</span>
+            </div>
+          `;
+        }
+      }
+
+      const select = document.getElementById('verifiedModalStoreSelect');
+      if (select) {
+        const storeOptions = (prices.length > 0 ? prices : [{ banner: data.banner || 'Supermarket', price: data.sale_price || 0 }]);
+        select.innerHTML = storeOptions.map(sp => `
+          <option value="${sp.store_name || sp.banner}">${sp.store_name || sp.banner} - $${Number(sp.price).toFixed(2)}</option>
+        `).join('');
+      }
+
+      const qtyElem = document.getElementById('verifiedModalQtyVal');
+      if (qtyElem) qtyElem.innerText = '1';
+
+      const modal = document.getElementById('verifiedBarcodeModal');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeVerifiedBarcodeModal() {
+      const modal = document.getElementById('verifiedBarcodeModal');
+      if (modal) modal.classList.add('hidden');
+      AppState.verifiedBarcodeProduct = null;
+    }
+
+    function updateVerifiedModalQty(delta) {
+      AppState.verifiedBarcodeQty = Math.max(1, (AppState.verifiedBarcodeQty || 1) + delta);
+      const qtyElem = document.getElementById('verifiedModalQtyVal');
+      if (qtyElem) qtyElem.innerText = AppState.verifiedBarcodeQty;
+    }
+
+    function confirmAddVerifiedBarcodeToBasket() {
+      const data = AppState.verifiedBarcodeProduct;
+      if (!data) return;
+
+      const storeSelect = document.getElementById('verifiedModalStoreSelect');
+      const selectedStore = storeSelect ? storeSelect.value.split(' - ')[0] : (data.banner || 'Supermarket');
+      const qty = AppState.verifiedBarcodeQty || 1;
+
+      const storePrices = data.store_prices || [];
+      const matched = storePrices.find(sp => (sp.store_name || sp.banner) === selectedStore);
+      const price = matched ? matched.price : (data.sale_price || 3.99);
+      const regPrice = data.regular_price || price;
+
+      AppState.basket.push({
+        name: data.name,
+        brand: data.brand || 'Verified Product',
+        package_size: data.package_size || '1 unit',
+        category: data.category || 'Pantry',
+        price: price,
+        reg_price: regPrice,
+        banner: selectedStore,
+        quantity: qty,
+        checked: false,
+        isPantry: false
+      });
+
+      localStorage.setItem('sc_basket', JSON.stringify(AppState.basket));
+      renderBasket();
+      closeVerifiedBarcodeModal();
+      showToast(`Added ${qty}x ${data.name} (${selectedStore}) to basket!`);
     }
 
     function renderBarcodeResult(data) {
@@ -3352,8 +3828,18 @@
       try {
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Initializing Camera...';
 
+        let lastScanTime = 0;
         if (typeof ZXing !== 'undefined') {
-          AppState.codeReader = new ZXing.BrowserMultiFormatReader();
+          const hints = new Map();
+          if (ZXing.DecodeHintType && ZXing.BarcodeFormat) {
+            hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+              ZXing.BarcodeFormat.UPC_A,
+              ZXing.BarcodeFormat.UPC_E,
+              ZXing.BarcodeFormat.EAN_13,
+              ZXing.BarcodeFormat.CODE_128
+            ]);
+          }
+          AppState.codeReader = new ZXing.BrowserMultiFormatReader(hints);
           const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
           AppState.cameraStream = stream;
           video.srcObject = stream;
@@ -3366,8 +3852,12 @@
 
           AppState.codeReader.decodeFromVideoElement(video, (result, err) => {
             if (result) {
-              const code = result.getText();
+              const now = Date.now();
+              if (now - lastScanTime < 1500) return;
+              const raw = result.getText();
+              const code = normalizeBarcode(raw);
               if (code && code !== AppState.lastScannedBarcode) {
+                lastScanTime = now;
                 AppState.lastScannedBarcode = code;
                 showToast(`Scanned: ${code}`);
                 triggerBarcodeScan(code);
@@ -3376,7 +3866,7 @@
             }
           });
         } else if ('BarcodeDetector' in window) {
-          const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code'] });
+          const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] });
           const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
           AppState.cameraStream = stream;
           video.srcObject = stream;
@@ -3392,13 +3882,18 @@
             try {
               const detected = await detector.detect(video);
               if (detected && detected.length > 0) {
-                const code = detected[0].rawValue;
-                if (code && code !== AppState.lastScannedBarcode) {
-                  AppState.lastScannedBarcode = code;
-                  showToast(`Scanned: ${code}`);
-                  triggerBarcodeScan(code);
-                  toggleCameraScanner();
-                  return;
+                const now = Date.now();
+                if (now - lastScanTime >= 1500) {
+                  const raw = detected[0].rawValue;
+                  const code = normalizeBarcode(raw);
+                  if (code && code !== AppState.lastScannedBarcode) {
+                    lastScanTime = now;
+                    AppState.lastScannedBarcode = code;
+                    showToast(`Scanned: ${code}`);
+                    triggerBarcodeScan(code);
+                    toggleCameraScanner();
+                    return;
+                  }
                 }
               }
             } catch (e) {}

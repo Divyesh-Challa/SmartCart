@@ -5,11 +5,28 @@ SmartCart Database Module - Comprehensive Edmonton-wide Supermarkets and Complet
 import sqlite3
 import math
 import os
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 DEFAULT_DB_FILE = "smartcart.db" if os.access(".", os.W_OK) else "/tmp/smartcart.db"
 DB_PATH = Path(os.environ.get("SMARTCART_DB_PATH", DEFAULT_DB_FILE))
+
+def extract_unit_size(text: str) -> str:
+    """Extracts package / unit size (e.g. 1kg, 454g, 750g, 4L, 12-pack) from product title."""
+    if not text:
+        return "1 unit"
+    patterns = [
+        r"(\d+(?:\.\d+)?\s*(?:kg|g|lb|lbs|oz|ml|l|L)\b)",
+        r"(\d+(?:\.\d+)?\s*(?:pack|pk|count|ct|bunch|cans?|bottles?|jug|bag|loaf)\b)",
+        r"(bag of \d+)",
+        r"(\d+\s*x\s*\d+\s*(?:g|ml|kg))",
+    ]
+    for pat in patterns:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+    return "1 unit"
 
 def get_connection():
     conn = sqlite3.connect(str(DB_PATH))
@@ -207,9 +224,16 @@ def init_db():
         unit_sale_price TEXT,
         discount_text TEXT,
         is_front_page INTEGER DEFAULT 0,
+        store_name TEXT,
+        unit_size TEXT,
+        valid_until TEXT,
         FOREIGN KEY (flyer_id) REFERENCES flyers(id),
         FOREIGN KEY (product_id) REFERENCES products(id)
     );
+
+    -- Schema migration for structured flyer deals
+    PRAGMA table_info(flyer_deals);
+
 
     CREATE INDEX IF NOT EXISTS idx_inventory_store ON store_inventory(store_id);
     CREATE INDEX IF NOT EXISTS idx_inventory_product ON store_inventory(product_id);
@@ -318,8 +342,45 @@ def init_db():
     );
     """)
 
+    # Dynamic migration for flyer_deals structured fields
+    cursor.execute("PRAGMA table_info(flyer_deals)")
+    existing_cols = {row["name"] for row in cursor.fetchall()}
+    for col_name in ["store_name", "item_name", "unit_size", "valid_until"]:
+        if col_name not in existing_cols:
+            cursor.execute(f"ALTER TABLE flyer_deals ADD COLUMN {col_name} TEXT")
+    
+    cursor.execute("""
+        UPDATE flyer_deals
+        SET store_name = (SELECT f.banner FROM flyers f WHERE f.id = flyer_deals.flyer_id)
+        WHERE store_name IS NULL
+    """)
+    cursor.execute("""
+        UPDATE flyer_deals
+        SET item_name = COALESCE(item_name, title)
+        WHERE item_name IS NULL
+    """)
+    cursor.execute("""
+        UPDATE flyer_deals
+        SET valid_until = (SELECT f.valid_to FROM flyers f WHERE f.id = flyer_deals.flyer_id)
+        WHERE valid_until IS NULL
+    """)
+    cursor.execute("""
+        UPDATE flyer_deals
+        SET unit_size = (SELECT printf('%g %s', p.package_quantity, p.package_unit) FROM products p WHERE p.id = flyer_deals.product_id)
+        WHERE (unit_size IS NULL OR unit_size = '') AND product_id IS NOT NULL
+    """)
+
+    # Fill any remaining unit_size with extracted size from title or default
+    cursor.execute("SELECT id, title FROM flyer_deals WHERE unit_size IS NULL OR unit_size = ''")
+    for r in cursor.fetchall():
+        u_size = extract_unit_size(r["title"])
+        cursor.execute("UPDATE flyer_deals SET unit_size = ? WHERE id = ?", (u_size, r["id"]))
+
+    conn.commit()
+
     # Seed DealDish supplementary data
     seed_dealdish_tables(conn)
+
 
     
     # 5. Seed Flyer-To-Dinner Recipes
@@ -1029,6 +1090,32 @@ def seed_edmonton_data(force: bool = False):
     INSERT INTO flyer_deals (flyer_id, product_id, title, category, page_number, original_price, sale_price, unit_sale_price, discount_text, is_front_page)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, deals)
+
+    # Populate structured fields
+    cursor.execute("""
+        UPDATE flyer_deals
+        SET store_name = (SELECT f.banner FROM flyers f WHERE f.id = flyer_deals.flyer_id)
+        WHERE store_name IS NULL
+    """)
+    cursor.execute("""
+        UPDATE flyer_deals
+        SET item_name = COALESCE(item_name, title)
+        WHERE item_name IS NULL
+    """)
+    cursor.execute("""
+        UPDATE flyer_deals
+        SET valid_until = (SELECT f.valid_to FROM flyers f WHERE f.id = flyer_deals.flyer_id)
+        WHERE valid_until IS NULL
+    """)
+    cursor.execute("""
+        UPDATE flyer_deals
+        SET unit_size = (SELECT printf('%g %s', p.package_quantity, p.package_unit) FROM products p WHERE p.id = flyer_deals.product_id)
+        WHERE (unit_size IS NULL OR unit_size = '') AND product_id IS NOT NULL
+    """)
+    cursor.execute("SELECT id, title FROM flyer_deals WHERE unit_size IS NULL OR unit_size = ''")
+    for r in cursor.fetchall():
+        u_size = extract_unit_size(r["title"])
+        cursor.execute("UPDATE flyer_deals SET unit_size = ? WHERE id = ?", (u_size, r["id"]))
 
     
     # 5. Seed Flyer-To-Dinner Recipes
