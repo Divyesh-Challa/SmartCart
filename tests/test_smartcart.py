@@ -366,6 +366,35 @@ class TestSmartCartEnhancementsTDD(unittest.TestCase):
             self.assertIn("ingredients", meal)
             self.assertGreater(len(meal["ingredients"]), 0)
 
+    def test_postal_code_proximity_search_filtering(self):
+        # 1. Search with Edmonton postal code T5K 2X4 within 25 km
+        res_edm = self.client.get("/api/v1/search/compare?q=chicken&postal_code=T5K%202X4&radius_km=25")
+        self.assertEqual(res_edm.status_code, 200)
+        data_edm = res_edm.json()
+        self.assertIn("data", data_edm)
+        self.assertIn("location", data_edm)
+        self.assertEqual(data_edm["location"]["postal_code"], "T5K 2X4")
+        
+        # All stores in Edmonton search must be within 25 km and have distance_km
+        for prod in data_edm["data"]:
+            for st in prod["stores"]:
+                if st.get("distance_km") is not None:
+                    self.assertLessEqual(st["distance_km"], 25.5, f"Store {st['store_name']} is {st['distance_km']}km away, exceeds 25km radius")
+                # City must not be Vancouver or Toronto
+                if st.get("city"):
+                    self.assertNotIn(st["city"], ["Vancouver", "Toronto", "Montreal"])
+
+        # 2. Search with Vancouver postal code V6B 1A1 within 20 km
+        res_van = self.client.get("/api/v1/search/compare?q=chicken&postal_code=V6B%201A1&radius_km=20")
+        self.assertEqual(res_van.status_code, 200)
+        data_van = res_van.json()
+        for prod in data_van["data"]:
+            for st in prod["stores"]:
+                if st.get("distance_km") is not None:
+                    self.assertLessEqual(st["distance_km"], 20.5)
+                if st.get("city"):
+                    self.assertNotIn(st["city"], ["Edmonton", "Calgary", "Toronto"])
+
 if __name__ == "__main__":
     unittest.main()
 

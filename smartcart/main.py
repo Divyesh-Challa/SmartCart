@@ -768,9 +768,29 @@ def parse_recipe(req: ParseRecipeRequest):
     return {"count": len(enriched), "items": enriched}
 
 @app.get("/api/search")
-def search_product(q: str = Query(..., description="Search term (e.g. banana, milk, chicken)")):
+def search_product(
+    q: str = Query(..., description="Search term (e.g. banana, milk, chicken)"),
+    postal_code: Optional[str] = Query(None, description="Postal code to localize nearby stores"),
+    city: Optional[str] = Query(None, description="City to filter stores"),
+    radius_km: Optional[float] = Query(25.0, description="Max radius in km")
+):
     q_clean = q.strip().lower()
     match = match_product_in_catalog(q_clean)
+
+    user_lat = None
+    user_lon = None
+    target_city = city
+    if postal_code:
+        geo = resolve_postal_code(postal_code)
+        if geo and geo.get("supported"):
+            user_lat = geo.get("latitude")
+            user_lon = geo.get("longitude")
+            target_city = geo.get("city", target_city)
+    elif city:
+        geo = resolve_postal_code(city)
+        if geo and geo.get("supported"):
+            user_lat = geo.get("latitude")
+            user_lon = geo.get("longitude")
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -789,9 +809,9 @@ def search_product(q: str = Query(..., description="Search term (e.g. banana, mi
 
     results = []
     for r in matching_rows[:6]:
-        prices = get_product_prices_across_stores(r["id"])
+        prices = get_product_prices_across_stores(r["id"], user_lat=user_lat, user_lon=user_lon, max_radius_km=radius_km, city=target_city)
         min_price = min((p["price"] for p in prices), default=0.0)
-        best_banner = next((p["banner"] for p in prices if p["price"] == min_price), "Edmonton Grocers")
+        best_banner = next((p["banner"] for p in prices if p["price"] == min_price), "Nearby Grocers")
         unit_p = next((p["unit_price"] for p in prices if p["price"] == min_price), 0.0)
         results.append({
             "id": r["id"],
@@ -805,14 +825,19 @@ def search_product(q: str = Query(..., description="Search term (e.g. banana, mi
             "std_type": r["standard_unit_type"]
         })
 
-    prices = get_product_prices_across_stores(match["id"]) if match else []
+    prices = get_product_prices_across_stores(match["id"], user_lat=user_lat, user_lon=user_lon, max_radius_km=radius_km, city=target_city) if match else []
 
     return {
         "query": q,
         "matched": bool(match or results),
         "product": match or (matching_rows[0] if matching_rows else None),
         "store_prices": prices,
-        "results": results
+        "results": results,
+        "location": {
+            "postal_code": postal_code,
+            "city": target_city,
+            "radius_km": radius_km
+        }
     }
 
 @app.post("/api/geocode")
@@ -1219,14 +1244,68 @@ def compare_prices(req: ComparisonRequest):
 @app.get("/api/v1/search/compare")
 def multi_store_price_comparison(
     q: str = Query(..., description="Product query (e.g. chicken, oats, milk, butter)"),
-    city: Optional[str] = Query("Edmonton"),
-    province: Optional[str] = Query("AB")
+    postal_code: Optional[str] = Query(None, description="User postal code (e.g. T5K 2X4, V6B 1A1, M5V 2T6)"),
+    city: Optional[str] = Query(None, description="City name"),
+    province: Optional[str] = Query(None),
+    radius_km: Optional[float] = Query(25.0, description="Proximity radius in km")
 ):
     q_clean = q.strip().lower()
     conn = get_connection()
     c = conn.cursor()
 
-    # 1. Match products from catalog
+    # 1. Resolve User Geographic Coordinates & Market City
+    user_lat = None
+    user_lon = None
+    target_city = city or "Edmonton"
+    target_postal = postal_code
+
+    if postal_code:
+        geo = resolve_postal_code(postal_code)
+        if geo and geo.get("supported"):
+            user_lat = geo.get("latitude")
+            user_lon = geo.get("longitude")
+            target_city = geo.get("city", target_city)
+            target_postal = geo.get("postal_code", postal_code)
+    elif city:
+        geo = resolve_postal_code(city)
+        if geo and geo.get("supported"):
+            user_lat = geo.get("latitude")
+            user_lon = geo.get("longitude")
+            target_city = geo.get("city", city)
+
+    if user_lat is None or user_lon is None:
+        user_lat = DEFAULT_USER_LAT
+        user_lon = DEFAULT_USER_LON
+        target_city = target_city or "Edmonton"
+
+    # 2. Select Stores Strictly Near The User's Location / Postal Code
+    c.execute("""
+        SELECT id, name, banner, address, city, postal_code, latitude, longitude, requires_membership
+        FROM stores
+    """)
+    all_stores = [dict(s) for s in c.fetchall()]
+
+    nearby_stores = []
+    for s in all_stores:
+        dist = haversine_distance_km(user_lat, user_lon, s["latitude"], s["longitude"])
+        if dist <= radius_km:
+            s["distance_km"] = round(dist, 1)
+            nearby_stores.append(s)
+
+    # Adaptive fallback: if rural or restrictive radius, match within 45km or match target city
+    if not nearby_stores:
+        for s in all_stores:
+            dist = haversine_distance_km(user_lat, user_lon, s["latitude"], s["longitude"])
+            if dist <= 45.0 or (target_city and s.get("city", "").lower() == target_city.lower()):
+                s["distance_km"] = round(dist, 1)
+                nearby_stores.append(s)
+
+    # Sort nearby stores by distance
+    nearby_stores.sort(key=lambda s: s["distance_km"])
+    nearby_store_map = {s["id"]: s for s in nearby_stores}
+    nearby_store_ids = set(nearby_store_map.keys())
+
+    # 3. Match products from catalog
     c.execute("""
         SELECT id, name, category, brand, package_quantity, package_unit, standard_unit_type
         FROM products
@@ -1253,7 +1332,7 @@ def multi_store_price_comparison(
         """)
         products = [dict(r) for r in c.fetchall()]
 
-    # 2. Fetch active flyer deals for cross-referencing
+    # 4. Fetch active flyer deals for cross-referencing
     c.execute("""
         SELECT d.id, d.title, d.product_id, d.sale_price, d.original_price, d.discount_text, d.valid_until, d.store_name, f.banner
         FROM flyer_deals d
@@ -1261,18 +1340,21 @@ def multi_store_price_comparison(
     """)
     all_deals = [dict(d) for d in c.fetchall()]
 
-    target_banners = ["No Frills", "Real Canadian Superstore", "Walmart", "Save-On-Foods", "Safeway", "Sobeys"]
-
     grouped_results = []
     for prod in products:
         p_id = prod["id"]
-        c.execute("""
-            SELECT si.price, s.id as store_id, s.name as store_name, s.banner
-            FROM store_inventory si
-            JOIN stores s ON s.id = si.store_id
-            WHERE si.product_id = ?
-        """, (p_id,))
-        inv_rows = [dict(r) for r in c.fetchall()]
+
+        if nearby_store_ids:
+            placeholders = ",".join("?" * len(nearby_store_ids))
+            c.execute(f"""
+                SELECT si.price, si.unit_price, si.in_stock, s.id as store_id, s.name as store_name, s.banner, s.address, s.city, s.latitude, s.longitude
+                FROM store_inventory si
+                JOIN stores s ON s.id = si.store_id
+                WHERE si.product_id = ? AND s.id IN ({placeholders})
+            """, [p_id] + list(nearby_store_ids))
+            inv_rows = [dict(r) for r in c.fetchall()]
+        else:
+            inv_rows = []
 
         deal_for_prod = {}
         for d in all_deals:
@@ -1284,15 +1366,20 @@ def multi_store_price_comparison(
         banner_stores = {}
         for inv in inv_rows:
             b = inv["banner"]
+            inv["distance_km"] = nearby_store_map.get(inv["store_id"], {}).get("distance_km", 0.0)
             if b not in banner_stores or inv["price"] < banner_stores[b]["price"]:
                 banner_stores[b] = inv
 
-        # Option B: Include only real store inventory and active flyer circulars
+        # Include local flyer deals
         for b, deal in deal_for_prod.items():
             if b not in banner_stores and deal.get("sale_price"):
+                matched_local_store = next((s for s in nearby_stores if s["banner"].lower() == b.lower()), None)
                 banner_stores[b] = {
-                    "store_id": deal.get("id", 0),
-                    "store_name": deal.get("store_name") or f"{b} {city or ''}".strip(),
+                    "store_id": matched_local_store["id"] if matched_local_store else deal.get("id", 0),
+                    "store_name": matched_local_store["name"] if matched_local_store else (deal.get("store_name") or f"{b} {target_city}").strip(),
+                    "address": matched_local_store["address"] if matched_local_store else f"{target_city}",
+                    "city": target_city,
+                    "distance_km": matched_local_store["distance_km"] if matched_local_store else 2.5,
                     "banner": b,
                     "price": deal["sale_price"]
                 }
@@ -1324,9 +1411,17 @@ def multi_store_price_comparison(
                 unit_price_val = price / pkg_qty if pkg_qty > 0 else price
                 unit_display = f"${unit_price_val:.2f}/unit"
 
+            st_dist = st.get("distance_km")
+            if st_dist is None and st.get("store_id") in nearby_store_map:
+                st_dist = nearby_store_map[st["store_id"]]["distance_km"]
+
             stores_list.append({
                 "store_id": st["store_id"],
                 "store_name": st["store_name"],
+                "address": st.get("address", ""),
+                "city": st.get("city", target_city),
+                "distance_km": st_dist,
+                "distance_display": f"{st_dist} km away" if st_dist is not None else "",
                 "banner": b,
                 "item_title": f"{prod['brand'] or 'Quality'} {prod['name']}",
                 "brand": prod["brand"] or "Canadian Brand",
@@ -1342,7 +1437,7 @@ def multi_store_price_comparison(
                 } if deal else None
             })
 
-        stores_list.sort(key=lambda x: x["price"])
+        stores_list.sort(key=lambda x: (x["price"], x.get("distance_km") or 999))
         if stores_list:
             min_price = stores_list[0]["price"]
             for s in stores_list:
@@ -1362,11 +1457,20 @@ def multi_store_price_comparison(
 
     conn.close()
     return {
+        "status": "ok",
         "data": grouped_results,
+        "location": {
+            "postal_code": target_postal,
+            "city": target_city,
+            "radius_km": radius_km,
+            "stores_found": len(nearby_stores),
+            "display_label": f"Stores within {int(radius_km)} km of {target_postal or target_city}"
+        },
         "meta": {
             "query": q,
             "total_matches": len(grouped_results),
-            "city": city or "Edmonton"
+            "city": target_city,
+            "postal_code": target_postal
         }
     }
 
