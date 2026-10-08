@@ -68,23 +68,50 @@ def normalize_quantity_to_standard(quantity: float, unit: str) -> Tuple[str, flo
     multiplier = UNIT_MULTIPLIERS.get(unit_lower, 1.0)
     return "unit", quantity * multiplier
 
+import time
+
+_PRODUCT_CATALOG_CACHE: Optional[List[Dict[str, Any]]] = None
+_CACHE_TIMESTAMP: float = 0.0
+_CACHE_TTL_SECONDS: float = 120.0
+
+def get_cached_products() -> List[Dict[str, Any]]:
+    global _PRODUCT_CATALOG_CACHE, _CACHE_TIMESTAMP
+    now = time.time()
+    if _PRODUCT_CATALOG_CACHE is None or (now - _CACHE_TIMESTAMP) > _CACHE_TTL_SECONDS:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+        SELECT id, name, category, brand, package_quantity, package_unit,
+               standard_unit_type, normalized_amount, aliases
+        FROM products
+        """)
+        _PRODUCT_CATALOG_CACHE = [dict(row) for row in cursor.fetchall()]
+        _CACHE_TIMESTAMP = now
+        conn.close()
+    return _PRODUCT_CATALOG_CACHE
+
 def tokenize(text: str) -> set:
     words = re.findall(r"\b\w+\b", text.lower())
-    stop_words = {"fresh", "organic", "large", "small", "can", "bag", "pack", "white", "for", "with", "and"}
+    stop_words = {"fresh", "organic", "large", "small", "can", "canned", "bag", "pack", "white", "for", "with", "and", "the", "of", "a", "an"}
     return {w for w in words if w not in stop_words}
 
-def match_product_in_catalog(query: str, preferred_category: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-    SELECT id, name, category, brand, package_quantity, package_unit,
-           standard_unit_type, normalized_amount, aliases
-    FROM products
-    """)
-    products = [dict(row) for row in cursor.fetchall()]
-    conn.close()
+# Modifier conflict dictionary: if query contains key, candidate possessing conflicting values is heavily penalized
+CONFLICTING_MODIFIERS = {
+    "butter": {"peanut", "almond", "apple", "cookie"},
+    "cream": {"ice", "shaving", "sour", "tartar"},
+    "chicken": {"broth", "bouillon", "noodle", "soup"},
+    "beef": {"broth", "bouillon", "jerky"},
+    "onions": {"crispy", "rings"},
+    "cheese": {"cream", "cottage"}
+}
 
-    query_tokens = tokenize(query)
+def match_product_in_catalog(query: str, preferred_category: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    if not query:
+        return None
+
+    products = get_cached_products()
+    query_clean = query.strip().lower()
+    query_tokens = tokenize(query_clean)
     if not query_tokens:
         return None
 
@@ -93,34 +120,58 @@ def match_product_in_catalog(query: str, preferred_category: Optional[str] = Non
 
     for prod in products:
         score = 0.0
-        prod_tokens = tokenize(prod["name"])
+        prod_name_lower = prod["name"].lower()
+        prod_tokens = tokenize(prod_name_lower)
         alias_tokens = tokenize(prod["aliases"] or "")
+        all_candidate_tokens = prod_tokens.union(alias_tokens)
 
+        # 1. Exact alias match
         aliases = [a.strip().lower() for a in (prod["aliases"] or "").split(",") if a.strip()]
-        if query.strip().lower() in aliases:
+        if query_clean in aliases:
+            score += 25.0
+
+        # 2. Exact product name match or substring
+        if query_clean == prod_name_lower:
+            score += 20.0
+        elif query_clean in prod_name_lower:
+            score += 12.0
+        elif prod_name_lower in query_clean:
             score += 10.0
 
-        if query.lower() in prod["name"].lower():
-            score += 8.0
-
+        # 3. Token Overlap
         overlap_name = len(query_tokens.intersection(prod_tokens))
         overlap_alias = len(query_tokens.intersection(alias_tokens))
-        score += (overlap_name * 3.0) + (overlap_alias * 2.0)
+        overlap_total = len(query_tokens.intersection(all_candidate_tokens))
 
-        all_candidate_tokens = prod_tokens.union(alias_tokens)
-        if not query_tokens.intersection(all_candidate_tokens):
+        if overlap_total == 0 and score == 0.0:
             continue
 
-        if preferred_category and prod["category"].lower() == preferred_category.lower():
-            score += 2.0
+        score += (overlap_name * 4.0) + (overlap_alias * 2.5)
 
-        if score > best_score:
+        # 4. Conflicting Modifiers Penalty (prevents matching peanut butter to butter, or ice cream to cream)
+        for base_food, conflicting_set in CONFLICTING_MODIFIERS.items():
+            if base_food in query_tokens:
+                # If query does NOT have the modifier, but candidate DOES: penalize heavily
+                for conf in conflicting_set:
+                    if conf not in query_tokens and (conf in prod_tokens or conf in alias_tokens):
+                        score -= 15.0
+                    # If query HAS the modifier, but candidate lacks it: penalize
+                    elif conf in query_tokens and conf not in prod_tokens and conf not in alias_tokens:
+                        score -= 15.0
+
+        # 5. Category congruence
+        if preferred_category and prod["category"].lower() == preferred_category.lower():
+            score += 4.0
+
+        # 6. Precision ratio check (query tokens matched / total query tokens)
+        precision_ratio = overlap_total / max(1, len(query_tokens))
+        score += precision_ratio * 3.0
+
+        if score > best_score and score >= 4.0:
             best_score = score
             best_match = prod
 
-    if best_score > 0 and best_match:
-        return best_match
-    return None
+    return best_match
 
 def compute_packages_needed(required_qty: float, required_unit: str, product: Dict[str, Any]) -> int:
     std_type, req_norm = normalize_quantity_to_standard(required_qty, required_unit)

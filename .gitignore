@@ -9,3 +9,4 @@ __pycache__/
 *.log
 smartcart/static/uploads/flyers/*
 !smartcart/static/uploads/flyers/.gitkeep
+.agents/

@@ -4,6 +4,7 @@ Synthesizes nutritionally complete, budget-optimized meals by cross-referencing
 active high-discount ingredients from Canadian grocery flyer circulars.
 """
 
+import re
 from typing import List, Dict, Any, Optional
 from smartcart.database import get_connection
 
@@ -142,21 +143,76 @@ def fetch_active_flyer_deals_for_recipes(preferred_stores: Optional[List[str]] =
     return deals
 
 
-def match_deal_for_ingredient(ingredient_name: str, deals: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """Finds the best active flyer deal matching a given ingredient."""
-    ing_lower = ingredient_name.lower()
+def match_deal_for_ingredient(
+    ingredient_name: str,
+    deals: List[Dict[str, Any]],
+    expected_category: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """Finds the best active flyer deal matching a given ingredient, preventing cross-category false positives."""
+    if not ingredient_name or not deals:
+        return None
+
+    ing_lower = ingredient_name.lower().strip()
+    ignore_tokens = {
+        "1", "2", "3", "4", "5", "10", "kg", "g", "ml", "l", "lb", "oz", "bag", "pack",
+        "pk", "can", "canned", "large", "small", "fresh", "organic", "cut", "block", "crown", "of", "with"
+    }
+    ing_tokens = {t for t in re.findall(r"\b\w+\b", ing_lower) if t not in ignore_tokens}
+    if not ing_tokens:
+        return None
+
     best_deal = None
-    best_score = -1
+    best_score = -1.0
 
     for d in deals:
-        title_lower = (d["item_name"] or d["title"]).lower()
-        score = 0
-        for token in ing_lower.split():
-            if token in ["1", "2", "kg", "g", "ml", "large", "fresh", "organic", "bag", "pack"]:
-                continue
-            if token in title_lower:
-                score += 2
-        if score > best_score and score >= 2:
+        deal_title = (d.get("item_name") or d.get("title") or "").lower()
+        deal_cat = (d.get("category") or "").lower()
+        deal_tokens = set(re.findall(r"\b\w+\b", deal_title))
+
+        score = 0.0
+
+        if ing_lower in deal_title:
+            score += 15.0
+        elif deal_title in ing_lower:
+            score += 10.0
+
+        overlap = ing_tokens.intersection(deal_tokens)
+        if not overlap and score == 0.0:
+            continue
+        score += len(overlap) * 3.0
+
+        # Food Qualifier Congruence
+        if "thigh" in ing_lower or "thighs" in ing_lower:
+            if "thigh" in deal_title or "thighs" in deal_title:
+                score += 8.0
+            elif any(w in deal_title for w in ["wing", "wings", "breast", "breasts", "nugget", "nuggets", "burger"]):
+                score -= 12.0
+
+        if "fusilli" in ing_lower:
+            if "fusilli" in deal_title:
+                score += 8.0
+            elif any(p in deal_title for p in ["spaghetti", "macaroni", "penne", "linguine", "fettuccine"]):
+                score -= 4.0
+
+        if "cream" in ing_lower and "ice" not in ing_lower:
+            if "ice cream" in deal_title:
+                score -= 20.0
+
+        if "butter" in ing_lower and "peanut" not in ing_lower:
+            if "peanut butter" in deal_title:
+                score -= 20.0
+
+        if expected_category:
+            exp_cat_lower = expected_category.lower()
+            if deal_cat and (exp_cat_lower in deal_cat or deal_cat in exp_cat_lower):
+                score += 5.0
+            elif deal_cat and ("produce" in exp_cat_lower and "pantry" in deal_cat):
+                score -= 6.0
+
+        ratio = len(overlap) / max(1, len(ing_tokens))
+        score += ratio * 2.0
+
+        if score > best_score and score >= 3.0:
             best_score = score
             best_deal = d
 
@@ -250,7 +306,7 @@ def generate_flyer_grounded_meal_plan(
 
         # Cross-reference target items against active flyer deals
         for item_name, brand, base_sale, base_reg, cat, unit_sz in target_items:
-            deal_match = match_deal_for_ingredient(item_name, deals)
+            deal_match = match_deal_for_ingredient(item_name, deals, expected_category=cat)
             if deal_match:
                 deals_used_count += 1
                 store = deal_match["store_name"]

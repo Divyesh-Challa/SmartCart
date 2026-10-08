@@ -1978,8 +1978,8 @@
   <script>
     // Global Application State
     const AppState = {
-      selectedCity: 'Edmonton',
-      selectedProvince: 'Alberta',
+      selectedCity: localStorage.getItem('sc_city') || 'Edmonton',
+      selectedProvince: localStorage.getItem('sc_province') || 'Alberta',
       cityFlyers: [],
       currentModalFlyerDeals: [],
       recipes: [],
@@ -1996,9 +1996,9 @@
       currentRecipeCategory: 'all',
       currentFlyerBanner: 'No Frills',
       currentFlyerCategory: 'all',
-      listViewGroup: 'aisle',
-      showPantryStaples: true,
-      scannerMode: 'price',
+      listViewGroup: localStorage.getItem('sc_list_group') || 'aisle',
+      showPantryStaples: localStorage.getItem('sc_show_pantry') !== 'false',
+      scannerMode: localStorage.getItem('sc_scanner_mode') || 'price',
       activeModalRecipe: null,
       pendingMealPlanRecipe: null,
       cameraStream: null
@@ -2030,7 +2030,11 @@
     // --- ON DOM LOAD ---
     document.addEventListener('DOMContentLoaded', () => {
       initTheme();
-      loadCityFlyersAndDeals(AppState.selectedCity);
+      if (AppState.selectedCity) {
+        changeActiveCity(AppState.selectedCity, true);
+      } else {
+        loadCityFlyersAndDeals('Edmonton');
+      }
       loadRecipes();
       loadFlyerDeals();
       loadSavingsData();
@@ -2041,6 +2045,10 @@
       renderMealPlan();
       loadSyncStatus();
       executeMultiStoreSearch('chicken');
+
+      if (AppState.scannerMode) {
+        setScannerMode(AppState.scannerMode);
+      }
 
       const dateInput = document.getElementById('receiptDateInput');
       if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
@@ -2162,9 +2170,10 @@
     }
 
     // --- CANADIAN MULTI-MARKET CITY SELECTOR ENGINE ---
-    function changeActiveCity(cityName) {
+    function changeActiveCity(cityName, isInitial = false) {
       if (!cityName) return;
       AppState.selectedCity = cityName;
+      try { localStorage.setItem('sc_city', cityName); } catch(e){}
 
       // Update pills in hero terminal
       document.querySelectorAll('.city-quick-btn').forEach(btn => {
@@ -2210,7 +2219,9 @@
       }
 
       loadCityFlyersAndDeals(cityName);
-      showToast(`Connected to live grocery circulars for ${cityName}!`);
+      if (!isInitial) {
+        showToast(`Connected to live grocery circulars for ${cityName}!`);
+      }
     }
 
     function applyHeroLocationSearch() {
@@ -3425,6 +3436,7 @@
       const drawer = document.getElementById('basketDrawer');
       const backdrop = document.getElementById('basketDrawerBackdrop');
       if (!drawer || !backdrop) return;
+      try { localStorage.setItem('sc_drawer_open', 'true'); } catch(e){}
       backdrop.classList.remove('hidden');
       drawer.classList.remove('translate-x-full');
       document.body.classList.add('overflow-hidden');
@@ -3435,6 +3447,7 @@
       const drawer = document.getElementById('basketDrawer');
       const backdrop = document.getElementById('basketDrawerBackdrop');
       if (!drawer || !backdrop) return;
+      try { localStorage.setItem('sc_drawer_open', 'false'); } catch(e){}
       drawer.classList.add('translate-x-full');
       setTimeout(() => {
         if (backdrop) backdrop.classList.add('hidden');
@@ -3580,14 +3593,17 @@
     // --- FEATURE 5: SMARTSCAN LENS ENGINE ---
     function setScannerMode(mode) {
       AppState.scannerMode = mode;
+      try { localStorage.setItem('sc_scanner_mode', mode); } catch(e){}
       const btnP = document.getElementById('btnScannerModePrice');
       const btnN = document.getElementById('btnScannerModeNutrition');
-      if (mode === 'price') {
-        btnP.className = 'flex-1 py-2.5 rounded-xl bg-sc-navy dark:bg-sc-emerald text-white dark:text-sc-midnight flex items-center justify-center gap-2';
-        btnN.className = 'flex-1 py-2.5 rounded-xl text-sc-muted dark:text-slate-400 hover:text-sc-ink flex items-center justify-center gap-2';
-      } else {
-        btnN.className = 'flex-1 py-2.5 rounded-xl bg-sc-navy dark:bg-sc-emerald text-white dark:text-sc-midnight flex items-center justify-center gap-2';
-        btnP.className = 'flex-1 py-2.5 rounded-xl text-sc-muted dark:text-slate-400 hover:text-sc-ink flex items-center justify-center gap-2';
+      if (btnP && btnN) {
+        if (mode === 'price') {
+          btnP.className = 'flex-1 py-2.5 rounded-xl bg-sc-navy dark:bg-sc-emerald text-white dark:text-sc-midnight flex items-center justify-center gap-2';
+          btnN.className = 'flex-1 py-2.5 rounded-xl text-sc-muted dark:text-slate-400 hover:text-sc-ink flex items-center justify-center gap-2';
+        } else {
+          btnN.className = 'flex-1 py-2.5 rounded-xl bg-sc-navy dark:bg-sc-emerald text-white dark:text-sc-midnight flex items-center justify-center gap-2';
+          btnP.className = 'flex-1 py-2.5 rounded-xl text-sc-muted dark:text-slate-400 hover:text-sc-ink flex items-center justify-center gap-2';
+        }
       }
     }
 
@@ -4014,7 +4030,25 @@
       } catch (err) {
         console.warn('Camera stream error:', err);
         btn.innerHTML = '<i class="fa-solid fa-video"></i> Start Camera Stream';
-        alert('Camera access unavailable on this device or permission was denied. You can test barcode scanning by clicking any sample Canadian product below or typing UPC directly!');
+        if (placeholder) {
+          placeholder.classList.remove('hidden');
+          placeholder.innerHTML = `
+            <div class="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl mb-2">
+              <i class="fa-solid fa-video-slash"></i>
+            </div>
+            <p class="text-sm font-bold text-white">Camera Access Denied or Unavailable</p>
+            <p class="text-xs text-slate-300 mt-1 max-w-xs">Enable camera permissions in your browser, or tap any verified Canadian barcode sample below.</p>
+            <div class="mt-3 flex items-center gap-2">
+              <button onclick="toggleCameraScanner()" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer">
+                <i class="fa-solid fa-rotate-right"></i> Try Again
+              </button>
+              <button onclick="const inp=document.getElementById('barcodeInput'); if(inp){ inp.focus(); }" class="px-3 py-1.5 rounded-xl bg-sc-emerald text-sc-midnight font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer">
+                <i class="fa-solid fa-keyboard"></i> Type UPC
+              </button>
+            </div>
+          `;
+        }
+        showToast('Camera unavailable. You can click any sample below or enter UPC manually.');
       }
     }
 
@@ -4285,16 +4319,51 @@
 
     function renderOptimizerPlans(data) {
       const container = document.getElementById('optimizerPlansContainer');
-      const plans = data.plans || {};
+      if (!container || !data) return;
 
+      if (data.detail || data.error) {
+        const detailObj = typeof data.detail === 'object' ? data.detail : null;
+        const errMsg = detailObj?.message || (typeof data.detail === 'string' ? data.detail : (data.error || 'Optimization could not resolve valid store routes.'));
+        const recovery = data.recovery || detailObj?.recovery;
+        const suggestedRadius = recovery?.suggested_radius_km;
+        const recoveryAction = recovery?.recovery_action || 'Try expanding your travel radius or verifying items in your basket.';
+
+        container.innerHTML = `
+          <div class="col-span-3 p-8 rounded-3xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-center space-y-4 shadow-sm">
+            <div class="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-900/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto text-2xl shadow-inner">
+              <i class="fa-solid fa-map-location-dot"></i>
+            </div>
+            <div>
+              <h4 class="font-black text-lg text-amber-950 dark:text-amber-200">${errMsg}</h4>
+              <p class="text-xs text-amber-800/90 dark:text-amber-300/90 max-w-md mx-auto mt-1">${recoveryAction}</p>
+            </div>
+            ${suggestedRadius ? `
+              <div>
+                <button onclick="document.getElementById('optRadius').value='${suggestedRadius}'; runBasketOptimizer();" class="px-5 py-2.5 rounded-2xl bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-black text-xs shadow-md transition-all cursor-pointer">
+                  <i class="fa-solid fa-expand mr-1.5"></i> Expand Radius to ${suggestedRadius} km & Solve Routes
+                </button>
+              </div>
+            ` : `
+              <div>
+                <button onclick="document.getElementById('optRadius').value='25'; runBasketOptimizer();" class="px-5 py-2.5 rounded-2xl bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-black text-xs shadow-md transition-all cursor-pointer">
+                  <i class="fa-solid fa-rotate-right mr-1.5"></i> Try 25 km Regional Radius
+                </button>
+              </div>
+            `}
+          </div>
+        `;
+        return;
+      }
+
+      const plans = data.plans || {};
       const planTypes = [
-        { key: 'plan_1_split', title: 'Plan 1: Maximum Saver', subtitle: 'Optimal multi-store split factoring in driving gas', badge: 'Lowest Total Out-of-Pocket' },
-        { key: 'plan_2_single', title: 'Plan 2: Best Single Run', subtitle: 'Lowest overall price at a single supermarket location', badge: '1-Stop Convenience' },
-        { key: 'plan_3_stock', title: 'Plan 3: In-Stock Guaranteed', subtitle: 'Guaranteed 100% item availability across full basket', badge: 'Zero Stock Risk' }
+        { key: 'plan_1_split', fallbackKey: 'maximum_saver', title: 'Plan 1: Maximum Saver', subtitle: 'Optimal multi-store split factoring in driving gas', badge: 'Lowest Total Out-of-Pocket' },
+        { key: 'plan_2_single', fallbackKey: 'best_single_run', title: 'Plan 2: Best Single Run', subtitle: 'Lowest overall price at a single supermarket location', badge: '1-Stop Convenience' },
+        { key: 'plan_3_stock', fallbackKey: 'in_stock_guaranteed', title: 'Plan 3: In-Stock Guaranteed', subtitle: 'Guaranteed 100% item availability across full basket', badge: 'Zero Stock Risk' }
       ];
 
-      container.innerHTML = planTypes.map(pt => {
-        const p = plans[pt.key];
+      const cardsHtml = planTypes.map(pt => {
+        const p = plans[pt.key] || plans[pt.fallbackKey];
         if (!p) return '';
 
         return `
@@ -4351,7 +4420,19 @@
             ` : ''}
           </div>
         `;
-      }).join('');
+      }).filter(Boolean).join('');
+
+      if (!cardsHtml) {
+        container.innerHTML = `
+          <div class="col-span-3 p-8 rounded-3xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-center space-y-3">
+            <i class="fa-solid fa-store-slash text-3xl text-slate-400"></i>
+            <h4 class="font-bold text-sm text-slate-700 dark:text-slate-200">No complete store routes found for this combination</h4>
+            <p class="text-xs text-slate-500 max-w-sm mx-auto">Try enabling membership clubs or increasing your travel radius.</p>
+          </div>
+        `;
+      } else {
+        container.innerHTML = cardsHtml;
+      }
     }
 
     function openProModal() {
