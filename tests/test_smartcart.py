@@ -395,6 +395,23 @@ class TestSmartCartEnhancementsTDD(unittest.TestCase):
                 if st.get("city"):
                     self.assertNotIn(st["city"], ["Edmonton", "Calgary", "Toronto"])
 
+    def test_multi_page_companion_routes_serve_html(self):
+        routes = ["/", "/compare", "/flyers", "/meals", "/recipes", "/optimizer", "/scanner", "/savings"]
+        for r in routes:
+            res = self.client.get(r)
+            self.assertEqual(res.status_code, 200, f"Route {r} should return 200")
+            self.assertIn("text/html", res.headers.get("content-type", ""))
+            self.assertIn("SmartCart", res.text)
+
+    def test_static_assets_exist(self):
+        res_js = self.client.get("/static/js/shared.js")
+        self.assertEqual(res_js.status_code, 200)
+        self.assertIn("AppState", res_js.text)
+
+        res_css = self.client.get("/static/css/shared.css")
+        self.assertEqual(res_css.status_code, 200)
+        self.assertIn("spotlight-card", res_css.text)
+
 if __name__ == "__main__":
     unittest.main()
 

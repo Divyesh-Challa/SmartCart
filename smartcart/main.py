@@ -7,7 +7,7 @@ Serves the SmartCart Web Companion interface.
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -1517,3 +1517,46 @@ def serve_ui():
     if index_file.exists():
         return FileResponse(str(index_file))
     return "<h1>SmartCart API is running. Web companion UI not found.</h1>"
+
+@app.get("/compare", response_class=HTMLResponse)
+def serve_compare_page():
+    f = STATIC_DIR / "compare.html"
+    if f.exists():
+        return FileResponse(str(f))
+    return RedirectResponse(url="/")
+
+@app.get("/flyers", response_class=HTMLResponse)
+def serve_flyers_page():
+    f = STATIC_DIR / "flyers.html"
+    if f.exists():
+        return FileResponse(str(f))
+    return RedirectResponse(url="/")
+
+@app.get("/meals", response_class=HTMLResponse)
+@app.get("/recipes", response_class=HTMLResponse)
+def serve_meals_page():
+    f = STATIC_DIR / "meals.html"
+    if f.exists():
+        return FileResponse(str(f))
+    return RedirectResponse(url="/")
+
+@app.get("/optimizer", response_class=HTMLResponse)
+def serve_optimizer_page():
+    f = STATIC_DIR / "optimizer.html"
+    if f.exists():
+        return FileResponse(str(f))
+    return RedirectResponse(url="/")
+
+@app.get("/scanner", response_class=HTMLResponse)
+def serve_scanner_page():
+    f = STATIC_DIR / "scanner.html"
+    if f.exists():
+        return FileResponse(str(f))
+    return RedirectResponse(url="/")
+
+@app.get("/savings", response_class=HTMLResponse)
+def serve_savings_page():
+    f = STATIC_DIR / "savings.html"
+    if f.exists():
+        return FileResponse(str(f))
+    return RedirectResponse(url="/")

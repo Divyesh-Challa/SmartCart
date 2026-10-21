@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3-Plan Route & Basket Optimizer | SmartCart</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="/static/css/shared.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            sc: {
+              midnight: '#09101D',
+              navy: '#0F172A',
+              slate: '#1E293B',
+              borderdark: '#334155',
+              emerald: '#10B981',
+              emeraldlight: '#34D399',
+              emeralddark: '#059669',
+              emeraldtint: '#ECFDF5',
+              cyan: '#06B6D4',
+              amber: '#F59E0B',
+              canvas: '#F8FAFC',
+              surface: '#FFFFFF',
+              ink: '#0F172A',
+              muted: '#64748B',
+              border: '#E2E8F0',
+              darkcanvas: '#0B0F19',
+              darksurface: '#131B2E',
+              darkborder: '#1E293B'
+            }
+          },
+          fontFamily: {
+            sans: ['"DM Sans"', 'sans-serif'],
+            display: ['"Plus Jakarta Sans"', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="min-h-screen flex flex-col bg-sc-canvas dark:bg-sc-darkcanvas text-sc-ink dark:text-slate-100 antialiased">
+
+  <!-- Header Navigation -->
+  <header class="sticky top-0 z-40 bg-sc-midnight/95 backdrop-blur-md border-b border-white/10" id="mainHeader">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16 sm:h-20">
+        
+        <!-- Logo -->
+        <a href="/" class="flex items-center gap-3 text-white font-black group">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+            <i class="fa-solid fa-cart-shopping text-white text-lg"></i>
+          </div>
+          <div class="flex flex-col leading-none">
+            <div class="flex items-center gap-1.5">
+              <span class="text-xl sm:text-2xl font-black tracking-tight">Smart<span class="text-sc-emerald">Cart</span></span>
+              <span class="px-1.5 py-0.2 rounded-md bg-emerald-500/20 text-emerald-400 font-black text-[10px] uppercase tracking-wider">AI</span>
+            </div>
+            <span class="text-[10px] font-semibold text-slate-400 tracking-wider uppercase mt-0.5">3-Plan Route Optimizer</span>
+          </div>
+        </a>
+
+        <!-- Navigation Links -->
+        <nav class="hidden xl:flex items-center gap-5 lg:gap-6 flex-shrink-0 ml-auto">
+          <a href="/optimizer" class="relative text-sc-emerald font-bold text-sm tracking-wide transition-colors whitespace-nowrap flex items-center gap-1">
+            <i class="fa-solid fa-route text-xs"></i>
+            <span>3-Plan Optimizer</span>
+          </a>
+          <a href="/compare" target="_blank" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap flex items-center gap-1">
+            <span>Price Compare</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-60"></i>
+          </a>
+          <a href="/flyers" target="_blank" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap flex items-center gap-1">
+            <span>Weekly Flyers</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-60"></i>
+          </a>
+          <a href="/meals" target="_blank" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap flex items-center gap-1">
+            <span>Flyer Dinners & Meals</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-60"></i>
+          </a>
+          <a href="/scanner" target="_blank" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap flex items-center gap-1">
+            <span>Barcode Lens</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-60"></i>
+          </a>
+          <a href="/savings" target="_blank" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap flex items-center gap-1">
+            <span>Savings Tracker</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-60"></i>
+          </a>
+        </nav>
+
+        <!-- Right Controls -->
+        <div class="flex items-center gap-2.5 sm:gap-3.5 ml-4 sm:ml-6 flex-shrink-0">
+          <button onclick="openBasketDrawer()" class="relative inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer" title="View Basket Details">
+            <i class="fa-solid fa-basket-shopping text-sm"></i>
+            <span id="navCartCountBadge" class="absolute -top-1 -right-1 bg-sc-emerald text-sc-midnight font-black text-[11px] w-5 h-5 rounded-full flex items-center justify-center shadow-md">0</span>
+          </button>
+          <button onclick="openSyncModal()" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all border border-white/10 cursor-pointer" title="Store Data Synchronization Status">
+            <span class="w-2 h-2 rounded-full bg-sc-emerald animate-pulse"></span>
+            <span id="navSyncBadgeText">3,524 Stores Live</span>
+          </button>
+          <button onclick="toggleDarkMode()" class="w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors" title="Toggle Appearance">
+            <i class="fa-solid fa-moon text-sm theme-toggle-icon"></i>
+          </button>
+          <button onclick="openProModal()" class="whitespace-nowrap inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-400 text-sc-midnight hover:brightness-110 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-2xl shadow-lg font-black text-xs sm:text-sm tracking-wider uppercase transition-transform active:scale-95">
+            <i class="fa-solid fa-bolt text-xs"></i>
+            <span>PRO</span>
+          </button>
+          <button onclick="toggleMobileMenu()" class="xl:hidden w-10 h-10 rounded-2xl bg-white/10 text-white flex items-center justify-center" aria-label="Toggle Navigation">
+            <i class="fa-solid fa-bars text-base" id="mobileMenuIcon"></i>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Mobile Drawer Menu -->
+    <div id="mobileNavDrawer" class="hidden xl:hidden bg-sc-midnight border-t border-white/10 px-4 pt-3 pb-6 space-y-2">
+      <a href="/optimizer" class="block px-3 py-2 rounded-xl text-sc-emerald font-bold bg-white/10">3-Plan Route Optimizer</a>
+      <a href="/compare" target="_blank" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">Price Compare ↗</a>
+      <a href="/flyers" target="_blank" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">Weekly Flyers ↗</a>
+      <a href="/meals" target="_blank" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">Flyer Dinners & Meals ↗</a>
+      <a href="/scanner" target="_blank" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">Barcode Lens ↗</a>
+      <a href="/savings" target="_blank" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">Savings Tracker ↗</a>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+    
+    <!-- Title Header -->
+    <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-8 pb-6 border-b border-sc-border dark:border-sc-darkborder">
+      <div>
+        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold uppercase tracking-wider border border-emerald-500/20 mb-3">
+          <i class="fa-solid fa-route text-sc-emerald"></i> Combinatorial Multi-Store Supermarket Optimizer
+        </div>
+        <h1 class="text-3xl sm:text-4xl lg:text-5xl font-black text-sc-ink dark:text-white tracking-tight">
+          3-Plan Basket & Route Optimizer
+        </h1>
+        <p class="mt-2 text-sc-muted dark:text-slate-400 text-sm sm:text-base max-w-2xl">
+          Solves the multi-store grocery problem. SmartCart compares 1-store convenience vs 2-store sweet spots vs maximum savings, deducting real vehicle gas costs ($/L) and outputting Google Maps navigation routes.
+        </p>
+      </div>
+
+      <!-- Live Gas Price Pill -->
+      <div class="flex items-center gap-3 bg-white dark:bg-sc-darksurface p-3 rounded-2xl border border-sc-border dark:border-sc-darkborder shadow-sm flex-shrink-0">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-gas-pump"></i>
+        </div>
+        <div>
+          <div class="text-[10px] font-bold text-sc-muted dark:text-slate-400 uppercase">Live Supermarket Fuel</div>
+          <div class="text-sm font-black text-sc-ink dark:text-white" id="optimizerGasPriceVal">$1.620 / L</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Workspace Grid: Left = Basket Review, Right = Optimizer Config -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
+      
+      <!-- Left Column: Shopping Basket Manager (7 cols) -->
+      <div class="lg:col-span-7 space-y-6">
+        <div class="p-6 rounded-3xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder shadow-sm space-y-5">
+          
+          <div class="flex items-center justify-between pb-4 border-b border-sc-border dark:border-sc-darkborder">
+            <div class="flex items-center gap-2.5">
+              <i class="fa-solid fa-basket-shopping text-sc-emerald text-lg"></i>
+              <h2 class="font-black text-xl text-sc-ink dark:text-white tracking-tight">Your Staged Basket</h2>
+              <span id="pageBasketCountBadge" class="px-2 py-0.5 rounded-full bg-sc-emerald text-sc-midnight font-black text-xs">0 items</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="clearBasket()" class="px-3 py-1.5 text-xs text-red-500 hover:text-red-700 font-bold hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-colors">
+                <i class="fa-solid fa-trash-can mr-1"></i> Clear All
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Add Input -->
+          <div class="flex gap-2">
+            <input 
+              type="text" 
+              id="optimizerAddInput" 
+              onkeydown="if(event.key==='Enter') handleOptimizerQuickAdd()" 
+              placeholder="Type grocery item to add (e.g. 2% Milk, Chicken Thighs, Butter)..." 
+              class="flex-1 px-4 py-3 text-xs sm:text-sm rounded-2xl bg-sc-canvas dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder text-sc-ink dark:text-white font-semibold outline-none focus:ring-2 focus:ring-sc-emerald"
+            >
+            <button onclick="handleOptimizerQuickAdd()" class="px-5 py-3 rounded-2xl bg-sc-emerald hover:brightness-110 text-sc-midnight font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-sm">
+              <i class="fa-solid fa-plus"></i> Add
+            </button>
+          </div>
+
+          <!-- Staged Items List -->
+          <div id="optimizerItemsContainer" class="space-y-3 max-h-[460px] overflow-y-auto pr-1">
+            <!-- Loaded dynamically -->
+          </div>
+
+          <!-- Basket Totals Summary Strip -->
+          <div class="p-4 rounded-2xl bg-sc-canvas dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder flex items-center justify-between text-xs sm:text-sm">
+            <div>
+              <span class="text-sc-muted dark:text-slate-400">Estimated Total:</span>
+              <span id="optimizerBasketTotalCost" class="font-black text-lg text-sc-emerald ml-1.5 tabular-nums">$0.00</span>
+            </div>
+            <div>
+              <span class="text-sc-muted dark:text-slate-400">Flyer Savings:</span>
+              <span id="optimizerBasketSavedCost" class="font-bold text-amber-500 ml-1.5 tabular-nums">-$0.00</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Right Column: Optimizer Parameters & Trigger (5 cols) -->
+      <div class="lg:col-span-5 space-y-6">
+        <div class="p-6 rounded-3xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder shadow-sm space-y-5">
+          
+          <div class="pb-4 border-b border-sc-border dark:border-sc-darkborder">
+            <h2 class="font-black text-xl text-sc-ink dark:text-white tracking-tight flex items-center gap-2">
+              <i class="fa-solid fa-sliders text-sc-emerald"></i>
+              <span>Routing Parameters</span>
+            </h2>
+            <p class="text-xs text-sc-muted dark:text-slate-400 mt-1">Configure your location and travel boundaries</p>
+          </div>
+
+          <!-- Home Postal Code -->
+          <div class="space-y-1.5">
+            <label class="font-bold text-xs text-sc-ink dark:text-white uppercase tracking-wider flex items-center gap-1">
+              <i class="fa-solid fa-location-dot text-emerald-500"></i> Home Postal Code / Starting Point:
+            </label>
+            <input 
+              type="text" 
+              id="optimizerPostalCode" 
+              value="T5K 2X4" 
+              maxlength="7" 
+              class="w-full px-4 py-3 rounded-2xl bg-sc-canvas dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder text-sm font-black text-sc-ink dark:text-white uppercase outline-none focus:ring-2 focus:ring-sc-emerald"
+            >
+          </div>
+
+          <!-- Travel Radius Range -->
+          <div class="space-y-2">
+            <div class="flex justify-between text-xs font-bold">
+              <span class="text-sc-ink dark:text-white uppercase tracking-wider">Maximum Search Radius:</span>
+              <span id="radiusLabel" class="text-sc-emerald font-black">25 km</span>
+            </div>
+            <input 
+              type="range" 
+              id="optimizerRadiusRange" 
+              min="5" 
+              max="50" 
+              step="5" 
+              value="25" 
+              oninput="document.getElementById('radiusLabel').innerText = this.value + ' km'" 
+              class="w-full accent-emerald-500 cursor-pointer"
+            >
+            <div class="flex justify-between text-[10px] text-sc-muted dark:text-slate-400">
+              <span>5 km</span>
+              <span>25 km (Recommended)</span>
+              <span>50 km</span>
+            </div>
+          </div>
+
+          <!-- Membership Club Toggle -->
+          <div class="p-3.5 rounded-2xl bg-sc-canvas dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder flex items-center justify-between">
+            <div>
+              <div class="font-bold text-xs text-sc-ink dark:text-white">Exclude Costco Wholesale</div>
+              <div class="text-[10px] text-sc-muted dark:text-slate-400">Skip membership warehouse clubs</div>
+            </div>
+            <input type="checkbox" id="optimizerExcludeCostco" class="w-4 h-4 accent-emerald-500 rounded cursor-pointer">
+          </div>
+
+          <!-- Big Action Trigger -->
+          <button 
+            onclick="runBasketOptimization()" 
+            class="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-110 text-sc-midnight font-black text-base shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-95"
+          >
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <span>Calculate 3-Plan Route Matrix</span>
+          </button>
+
+          <p class="text-[11px] text-center text-sc-muted dark:text-slate-400 leading-snug">
+            Calculates 1-store, 2-store, and 3-store itineraries. Factors local gas price ($1.62/L) and vehicle consumption to guarantee true net savings.
+          </p>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 3-Plan Comparison Results Matrix -->
+    <div class="space-y-6">
+      <div class="flex items-center justify-between">
+        <h3 class="font-black text-2xl text-sc-ink dark:text-white tracking-tight flex items-center gap-2">
+          <i class="fa-solid fa-square-poll-vertical text-sc-emerald"></i>
+          <span>Optimized Route Recommendations</span>
+        </h3>
+        <span class="text-xs text-sc-muted dark:text-slate-400">Click Google Maps to launch turn-by-turn navigation</span>
+      </div>
+
+      <!-- 3 Plans Grid Container -->
+      <div id="optimizerPlansContainer" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="col-span-full py-16 text-center rounded-3xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder space-y-3">
+          <div class="w-16 h-16 mx-auto rounded-3xl bg-emerald-500/10 text-sc-emerald flex items-center justify-center text-2xl">
+            <i class="fa-solid fa-route"></i>
+          </div>
+          <h4 class="font-black text-lg text-sc-ink dark:text-white">Ready to Optimize Your Grocery Trip</h4>
+          <p class="text-xs text-sc-muted dark:text-slate-400 max-w-md mx-auto">
+            Click "Calculate 3-Plan Route Matrix" above to evaluate store combinations and fuel costs.
+          </p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Slide-Over Basket Drawer & Modals -->
+  <div id="basketDrawerBackdrop" onclick="closeBasketDrawer()" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden transition-opacity duration-300"></div>
+  <div id="basketDrawer" class="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white dark:bg-sc-darksurface shadow-2xl border-l border-sc-border dark:border-sc-darkborder flex flex-col transform translate-x-full transition-transform duration-300 ease-in-out">
+    <div class="p-5 border-b border-sc-border dark:border-sc-darkborder flex items-center justify-between bg-sc-canvas dark:bg-sc-midnight">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-sc-emerald/15 text-sc-emerald flex items-center justify-center text-lg font-black">
+          <i class="fa-solid fa-basket-shopping"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="font-black text-base text-sc-ink dark:text-white">My SmartCart Basket</h3>
+            <span id="drawerBadgeCount" class="px-2 py-0.5 rounded-full bg-sc-emerald text-sc-midnight font-black text-xs">0</span>
+          </div>
+          <p class="text-xs text-sc-muted dark:text-slate-400">Items staged for route optimization</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="clearBasket()" class="p-2 text-xs text-red-500 hover:text-red-700 font-bold hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-colors" title="Clear Basket">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>
+        <button onclick="closeBasketDrawer()" class="w-8 h-8 rounded-full bg-white dark:bg-white/10 text-sc-ink dark:text-white flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/20 transition-colors">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="p-3 bg-sc-canvas/50 dark:bg-sc-midnight/50 border-b border-sc-border dark:border-sc-darkborder">
+      <div class="flex gap-2">
+        <input type="text" id="drawerQuickAddInput" onkeydown="if(event.key==='Enter') handleDrawerQuickAdd()" placeholder="Add grocery item to basket..." class="flex-1 px-3 py-2 text-xs rounded-xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder text-sc-ink dark:text-white outline-none focus:ring-2 focus:ring-sc-emerald">
+        <button onclick="handleDrawerQuickAdd()" class="px-3 py-2 rounded-xl bg-sc-emerald hover:brightness-110 text-sc-midnight font-bold text-xs flex items-center gap-1">
+          <i class="fa-solid fa-plus"></i> Add
+        </button>
+      </div>
+    </div>
+
+    <div id="drawerItemsList" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+
+    <div class="p-5 border-t border-sc-border dark:border-sc-darkborder bg-sc-canvas dark:bg-sc-midnight space-y-4">
+      <div class="space-y-1.5 text-xs">
+        <div class="flex justify-between text-sc-muted dark:text-slate-400">
+          <span>Shelf Regular Price</span>
+          <span id="drawerRegCost" class="line-through font-bold text-sc-ink dark:text-slate-300">$0.00</span>
+        </div>
+        <div class="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
+          <span>Estimated Flyer Savings</span>
+          <span id="drawerTotalSaved">-$0.00</span>
+        </div>
+        <div class="flex justify-between text-sm sm:text-base font-black text-sc-ink dark:text-white pt-1 border-t border-sc-border/60 dark:border-sc-darkborder/60">
+          <span>Estimated Total</span>
+          <span id="drawerTotalCost" class="text-sc-emerald tabular-nums">$0.00</span>
+        </div>
+      </div>
+
+      <button onclick="runBasketOptimization(); closeBasketDrawer();" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-110 text-sc-midnight font-black text-sm shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95">
+        <i class="fa-solid fa-route"></i>
+        <span>Recalculate 3-Plan Route Matrix</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Floating Quick Cart Trigger -->
+  <div id="floatingBasketBtn" class="fixed bottom-6 right-6 z-40">
+    <button onclick="openBasketDrawer()" class="flex items-center gap-2.5 px-4 py-3 rounded-full bg-sc-emerald hover:brightness-110 text-sc-midnight font-black text-sm shadow-2xl transition-all transform hover:scale-105 active:scale-95 border-2 border-sc-midnight/20">
+      <i class="fa-solid fa-basket-shopping text-base"></i>
+      <span>My Basket</span>
+      <span id="floatingCartCountBadge" class="bg-sc-midnight text-white text-xs px-2 py-0.5 rounded-full font-bold">0</span>
+    </button>
+  </div>
+
+  <!-- Sync Modal -->
+  <div id="syncModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-lg rounded-3xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder shadow-2xl overflow-hidden p-6 space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-sc-border dark:border-sc-darkborder">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-arrows-rotate text-sc-emerald text-lg"></i>
+          <h3 class="font-black text-lg text-sc-ink dark:text-white">Canadian Supermarket Sync</h3>
+        </div>
+        <button onclick="closeSyncModal()" class="w-8 h-8 rounded-full bg-sc-canvas dark:bg-white/10 text-sc-ink dark:text-white flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <p class="text-xs text-sc-muted dark:text-slate-400">
+        SmartCart indexes weekly circulars across 35 Canadian chains every Thursday at 12:01 AM.
+      </p>
+      <div class="flex justify-end gap-3 pt-2">
+        <button onclick="closeSyncModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-sc-muted hover:text-sc-ink dark:hover:text-white">Close</button>
+        <button id="syncModalTriggerBtn" onclick="triggerManualSync()" class="px-4 py-2 rounded-xl bg-sc-emerald text-sc-midnight font-bold text-xs hover:brightness-110">
+          <i class="fa-solid fa-rotate mr-1"></i> Force Refresh Now
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pro Modal -->
+  <div id="proModal" class="fixed inset-0 z-50 hidden bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-md rounded-3xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder p-6 shadow-2xl text-center space-y-4">
+      <div class="w-14 h-14 mx-auto rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-sc-midnight text-2xl font-black">
+        <i class="fa-solid fa-bolt"></i>
+      </div>
+      <h3 class="text-2xl font-black text-sc-ink dark:text-white">SmartCart PRO</h3>
+      <p class="text-xs text-sc-muted dark:text-slate-400">
+        Unlock automated grocery price alerts, multi-stop route optimization with fuel offsets, and barcode receipt audit tools.
+      </p>
+      <button onclick="closeProModal(); showToast('Pro account unlocked!')" class="w-full py-3 rounded-2xl bg-sc-emerald text-sc-midnight font-black text-sm hover:brightness-110">
+        Continue with Full Access
+      </button>
+    </div>
+  </div>
+
+  <!-- Shared Core Scripts -->
+  <script src="/static/js/shared.js"></script>
+
+  <!-- Page-Specific Optimizer Logic -->
+  <script>
+    function renderOptimizerBasket() {
+      const container = document.getElementById('optimizerItemsContainer');
+      const countBadge = document.getElementById('pageBasketCountBadge');
+      const totalCostEl = document.getElementById('optimizerBasketTotalCost');
+      const savedCostEl = document.getElementById('optimizerBasketSavedCost');
+
+      const items = AppState.basket || [];
+      if (countBadge) countBadge.innerText = `${items.length} items`;
+
+      let totalSale = 0;
+      let totalReg = 0;
+      items.forEach(it => {
+        const qty = it.qty || 1;
+        const sale = (it.price || it.sale_price || 0) * qty;
+        const reg = (it.reg_price || it.regular_price || it.price || 0) * qty;
+        totalSale += sale;
+        totalReg += Math.max(sale, reg);
+      });
+      const saved = Math.max(0, totalReg - totalSale);
+
+      if (totalCostEl) totalCostEl.innerText = formatCurrency(totalSale);
+      if (savedCostEl) savedCostEl.innerText = saved > 0 ? `-${formatCurrency(saved)}` : '$0.00';
+
+      if (items.length === 0) {
+        container.innerHTML = `
+          <div class="p-8 text-center text-sc-muted dark:text-slate-400 space-y-2 rounded-2xl bg-sc-canvas/50 dark:bg-sc-midnight/50 border border-dashed border-sc-border dark:border-sc-darkborder">
+            <i class="fa-solid fa-basket-shopping text-2xl text-sc-emerald"></i>
+            <p class="font-bold text-sm text-sc-ink dark:text-white">Your basket is currently empty</p>
+            <p class="text-xs">Type a grocery item above, or clip deals from Weekly Flyers / Price Compare.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = items.map((item, idx) => `
+        <div class="p-3.5 rounded-2xl bg-sc-canvas dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder flex items-center justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-xs sm:text-sm text-sc-ink dark:text-white truncate">${item.name}</span>
+              ${item.store ? `<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase ${getBannerColorClass(item.store)}">${item.store.split(' ')[0]}</span>` : ''}
+            </div>
+            <div class="text-[11px] text-sc-muted dark:text-slate-400 mt-0.5">
+              ${formatCurrency(item.price || item.sale_price)}/ea • Subtotal: <span class="font-bold text-sc-ink dark:text-slate-200">${formatCurrency((item.price || item.sale_price) * (item.qty || 1))}</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <div class="flex items-center bg-white dark:bg-sc-darksurface rounded-xl border border-sc-border dark:border-sc-darkborder px-1.5 py-0.5">
+              <button onclick="updateBasketQty(${idx}, -1)" class="w-6 h-6 flex items-center justify-center text-sc-muted hover:text-sc-ink font-black">-</button>
+              <span class="w-6 text-center font-bold text-xs text-sc-ink dark:text-white">${item.qty || 1}</span>
+              <button onclick="updateBasketQty(${idx}, 1)" class="w-6 h-6 flex items-center justify-center text-sc-muted hover:text-sc-ink font-black">+</button>
+            </div>
+            <button onclick="removeBasketItem(${idx})" class="p-2 text-sc-muted hover:text-red-500 transition-colors">
+              <i class="fa-solid fa-trash text-xs"></i>
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function handleOptimizerQuickAdd() {
+      const input = document.getElementById('optimizerAddInput');
+      if (!input || !input.value.trim()) return;
+      const val = input.value.trim();
+      AppState.basket.push({
+        name: val,
+        price: 3.99,
+        reg_price: 4.99,
+        qty: 1,
+        store: 'Supermarket',
+        category: 'Groceries'
+      });
+      saveBasket();
+      input.value = '';
+      showToast(`Added "${val}" to basket`);
+      renderOptimizerBasket();
+    }
+
+    window.onBasketChanged = function() {
+      renderOptimizerBasket();
+    };
+
+    async function loadGasPrice() {
+      try {
+        const res = await fetch('/api/gas-price');
+        const data = await res.json();
+        AppState.gasPrice = data.price_per_litre || 1.62;
+        const el = document.getElementById('optimizerGasPriceVal');
+        if (el) el.innerText = `$${AppState.gasPrice.toFixed(3)} / L`;
+      } catch (e) {
+        console.error('Failed to load gas price', e);
+      }
+    }
+
+    async function runBasketOptimization() {
+      const postal = (document.getElementById('optimizerPostalCode').value || AppState.postalCode || 'T5K 2X4').trim().toUpperCase();
+      const radius = parseFloat(document.getElementById('optimizerRadiusRange').value) || 25.0;
+      const exclude = document.getElementById('optimizerExcludeCostco').checked;
+
+      const container = document.getElementById('optimizerPlansContainer');
+      container.innerHTML = `
+        <div class="col-span-full py-16 text-center space-y-3">
+          <i class="fa-solid fa-spinner fa-spin text-3xl text-sc-emerald"></i>
+          <p class="font-bold text-sm text-sc-ink dark:text-white">Calculating combinatorial routes across regional supermarkets with live fuel pricing...</p>
+        </div>`;
+
+      const itemsToOptimize = (AppState.basket.length > 0 ? AppState.basket : [
+        { name: 'chicken thighs', quantity: 1.0, unit: 'kg' },
+        { name: 'butter', quantity: 1.0, unit: 'unit' },
+        { name: 'cheddar cheese', quantity: 1.0, unit: 'unit' }
+      ]).map(it => ({
+        name: it.name,
+        quantity: it.qty || 1.0,
+        unit: 'unit'
+      }));
+
+      try {
+        const res = await fetch('/api/basket/optimize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: itemsToOptimize,
+            postal_code: postal,
+            max_radius_km: radius,
+            exclude_membership: exclude,
+            gas_price_per_litre: AppState.gasPrice || 1.62
+          })
+        });
+
+        const data = await res.json();
+        renderOptimizerPlans(data);
+      } catch (e) {
+        container.innerHTML = `<div class="col-span-full p-6 text-red-500 font-bold text-center">Optimization failed: ${e.message}</div>`;
+      }
+    }
+
+    function renderOptimizerPlans(data) {
+      const container = document.getElementById('optimizerPlansContainer');
+      if (!container || !data) return;
+
+      if (data.detail || data.error) {
+        const detailObj = typeof data.detail === 'object' ? data.detail : null;
+        const errMsg = detailObj?.message || (typeof data.detail === 'string' ? data.detail : (data.error || 'Optimization could not resolve valid store routes.'));
+        const recovery = data.recovery || detailObj?.recovery;
+        const suggestedRadius = recovery?.suggested_radius_km || 25;
+        const recoveryAction = recovery?.recovery_action || 'Try expanding your travel radius or verifying items in your basket.';
+
+        container.innerHTML = `
+          <div class="col-span-full p-8 rounded-3xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-center space-y-4 shadow-sm">
+            <div class="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-900/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto text-2xl">
+              <i class="fa-solid fa-map-location-dot"></i>
+            </div>
+            <div>
+              <h4 class="font-black text-lg text-amber-950 dark:text-amber-200">${errMsg}</h4>
+              <p class="text-xs text-amber-800/90 dark:text-amber-300/90 max-w-md mx-auto mt-1">${recoveryAction}</p>
+            </div>
+            <div>
+              <button onclick="document.getElementById('optimizerRadiusRange').value='${suggestedRadius}'; document.getElementById('radiusLabel').innerText='${suggestedRadius} km'; runBasketOptimization();" class="px-5 py-2.5 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-md transition-all">
+                <i class="fa-solid fa-expand mr-1.5"></i> Expand Radius to ${suggestedRadius} km & Recalculate
+              </button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      const plans = data.plans || {};
+      const planTypes = [
+        { key: 'plan_1_split', fallbackKey: 'maximum_saver', title: 'Plan 1: Maximum Saver', subtitle: 'Optimal multi-store split factoring in driving gas', badge: 'Lowest Total Out-of-Pocket' },
+        { key: 'plan_2_single', fallbackKey: 'best_single_run', title: 'Plan 2: Best Single Run', subtitle: 'Lowest overall price at a single supermarket location', badge: '1-Stop Convenience' },
+        { key: 'plan_3_stock', fallbackKey: 'in_stock_guaranteed', title: 'Plan 3: In-Stock Guaranteed', subtitle: 'Guaranteed 100% item availability across full basket', badge: 'Zero Stock Risk' }
+      ];
+
+      const cardsHtml = planTypes.map(pt => {
+        const p = plans[pt.key] || plans[pt.fallbackKey];
+        if (!p) return '';
+
+        return `
+          <div class="sc-card p-6 rounded-3xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder flex flex-col justify-between shadow-md space-y-4 hover:border-sc-emerald/40 transition-all">
+            <div class="space-y-4">
+              <div class="flex items-center justify-between">
+                <span class="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[10px] font-black uppercase tracking-wider">
+                  ${pt.badge}
+                </span>
+                <span class="text-xs font-bold text-sc-muted dark:text-slate-400 tabular-nums">
+                  ${p.total_distance_km || 0} km • ~${p.drive_time_minutes || 0}m drive
+                </span>
+              </div>
+
+              <div>
+                <h3 class="font-black text-xl text-sc-ink dark:text-white tracking-tight">${pt.title}</h3>
+                <p class="text-xs text-sc-muted dark:text-slate-400 leading-snug mt-0.5">${pt.subtitle}</p>
+              </div>
+
+              <div class="p-4 rounded-2xl bg-sc-canvas dark:bg-sc-midnight space-y-1.5 text-xs">
+                <div class="flex justify-between text-sc-muted dark:text-slate-400">
+                  <span>Groceries Subtotal</span>
+                  <span class="font-bold text-sc-ink dark:text-white tabular-nums">$${(p.grocery_total || 0).toFixed(2)}</span>
+                </div>
+                <div class="flex justify-between text-sc-muted dark:text-slate-400">
+                  <span>Fuel Travel Cost</span>
+                  <span class="font-bold tabular-nums">+$${(p.gas_cost || 0).toFixed(2)}</span>
+                </div>
+                <div class="pt-2 border-t border-sc-border dark:border-sc-darkborder flex justify-between font-black text-sm text-sc-ink dark:text-white">
+                  <span>All-In Out-of-Pocket</span>
+                  <span class="text-sc-emerald text-lg tabular-nums">$${(p.total_cost || 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div class="space-y-2">
+                <div class="text-[11px] font-bold text-sc-muted dark:text-slate-400 uppercase tracking-wider">Supermarket Stops:</div>
+                ${(p.stores || []).map(st => `
+                  <div class="p-3 rounded-xl bg-sc-canvas dark:bg-sc-midnight flex items-center justify-between text-xs">
+                    <div>
+                      <div class="font-bold text-sc-ink dark:text-white">${st.store_name}</div>
+                      <div class="text-[10px] text-sc-muted dark:text-slate-400">${st.address}</div>
+                    </div>
+                    <span class="font-black text-sc-emerald tabular-nums text-sm">$${(st.store_subtotal || 0).toFixed(2)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            ${p.full_route_directions_url ? `
+              <a href="${p.full_route_directions_url}" target="_blank" rel="noopener noreferrer" class="w-full py-3 rounded-2xl bg-sc-navy dark:bg-sc-emerald text-white dark:text-sc-midnight font-bold text-xs flex items-center justify-center gap-2 transition-all hover:brightness-110 shadow-sm">
+                <i class="fa-solid fa-diamond-turn-right"></i>
+                <span>Open Google Maps Route ↗</span>
+              </a>
+            ` : ''}
+          </div>
+        `;
+      }).filter(Boolean).join('');
+
+      if (!cardsHtml) {
+        container.innerHTML = `
+          <div class="col-span-full p-8 rounded-3xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-center space-y-3">
+            <i class="fa-solid fa-store-slash text-3xl text-slate-400"></i>
+            <h4 class="font-bold text-sm text-slate-700 dark:text-slate-200">No complete store routes found for this combination</h4>
+            <p class="text-xs text-slate-500 max-w-sm mx-auto">Try expanding your search radius to 25 km or adding popular staple items.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = cardsHtml;
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      const savedPostal = localStorage.getItem('sc_postal_code');
+      if (savedPostal) {
+        const input = document.getElementById('optimizerPostalCode');
+        if (input) input.value = savedPostal;
+      }
+      renderOptimizerBasket();
+      loadGasPrice();
+    });
+  </script>
+</body>
+</html>

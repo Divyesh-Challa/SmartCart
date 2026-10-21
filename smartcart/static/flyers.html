@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weekly Digital Supermarket Flyers & Deals Radar | SmartCart</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="/static/css/shared.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            sc: {
+              midnight: '#09101D',
+              navy: '#0F172A',
+              slate: '#1E293B',
+              borderdark: '#334155',
+              emerald: '#10B981',
+              emeraldlight: '#34D399',
+              emeralddark: '#059669',
+              emeraldtint: '#ECFDF5',
+              cyan: '#06B6D4',
+              amber: '#F59E0B',
+              canvas: '#F8FAFC',
+              surface: '#FFFFFF',
+              ink: '#0F172A',
+              muted: '#64748B',
+              border: '#E2E8F0',
+              darkcanvas: '#0B0F19',
+              darksurface: '#131B2E',
+              darkborder: '#1E293B'
+            }
+          },
+          fontFamily: {
+            sans: ['"DM Sans"', 'sans-serif'],
+            display: ['"Plus Jakarta Sans"', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="min-h-screen flex flex-col bg-sc-canvas dark:bg-sc-darkcanvas text-sc-ink dark:text-slate-100 antialiased">
+
+  <!-- Header Navigation -->
+  <header class="sticky top-0 z-40 bg-sc-midnight/95 backdrop-blur-md border-b border-white/10" id="mainHeader">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16 sm:h-20">
+        
+        <!-- Logo -->
+        <a href="/" class="flex items-center gap-3 text-white font-black group">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+            <i class="fa-solid fa-cart-shopping text-white text-lg"></i>
+          </div>
+          <div class="flex flex-col leading-none">
+            <div class="flex items-center gap-1.5">
+              <span class="text-xl sm:text-2xl font-black tracking-tight">Smart<span class="text-sc-emerald">Cart</span></span>
+              <span class="px-1.5 py-0.2 rounded-md bg-emerald-500/20 text-emerald-400 font-black text-[10px] uppercase tracking-wider">AI</span>
+            </div>
+            <span class="text-[10px] font-semibold text-slate-400 tracking-wider uppercase mt-0.5">Weekly Digital Flyers</span>
+          </div>
+        </a>
+
+        <!-- Navigation Links -->
+        <nav class="hidden xl:flex items-center gap-5 lg:gap-6 flex-shrink-0 ml-auto">
+          <a href="/flyers" class="relative text-sc-emerald font-bold text-sm tracking-wide transition-colors whitespace-nowrap flex items-center gap-1">
+            <i class="fa-solid fa-book-open text-xs"></i>
+            <span>Weekly Flyers</span>
+          </a>
+          <a href="/compare" target="_blank" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap flex items-center gap-1">
+            <span>Price Compare</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-60"></i>
+          </a>
+          <a href="/meals" target="_blank" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap flex items-center gap-1">
+            <span>Flyer Dinners & Meals</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-60"></i>
+          </a>
+          <a href="/optimizer" target="_blank" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap flex items-center gap-1">
+            <span>3-Plan Optimizer</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-60"></i>
+          </a>
+          <a href="/scanner" target="_blank" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap flex items-center gap-1">
+            <span>Barcode Lens</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-60"></i>
+          </a>
+          <a href="/savings" target="_blank" class="relative text-slate-300 hover:text-white font-medium text-sm tracking-wide transition-colors whitespace-nowrap flex items-center gap-1">
+            <span>Savings Tracker</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-60"></i>
+          </a>
+        </nav>
+
+        <!-- Right Controls -->
+        <div class="flex items-center gap-2.5 sm:gap-3.5 ml-4 sm:ml-6 flex-shrink-0">
+          <button onclick="openBasketDrawer()" class="relative inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer" title="View Basket Details">
+            <i class="fa-solid fa-basket-shopping text-sm"></i>
+            <span id="navCartCountBadge" class="absolute -top-1 -right-1 bg-sc-emerald text-sc-midnight font-black text-[11px] w-5 h-5 rounded-full flex items-center justify-center shadow-md">0</span>
+          </button>
+          <button onclick="openSyncModal()" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all border border-white/10 cursor-pointer" title="Store Data Synchronization Status">
+            <span class="w-2 h-2 rounded-full bg-sc-emerald animate-pulse"></span>
+            <span id="navSyncBadgeText">3,524 Stores Live</span>
+          </button>
+          <button onclick="toggleDarkMode()" class="w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors" title="Toggle Appearance">
+            <i class="fa-solid fa-moon text-sm theme-toggle-icon"></i>
+          </button>
+          <button onclick="openProModal()" class="whitespace-nowrap inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-400 text-sc-midnight hover:brightness-110 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-2xl shadow-lg font-black text-xs sm:text-sm tracking-wider uppercase transition-transform active:scale-95">
+            <i class="fa-solid fa-bolt text-xs"></i>
+            <span>PRO</span>
+          </button>
+          <button onclick="toggleMobileMenu()" class="xl:hidden w-10 h-10 rounded-2xl bg-white/10 text-white flex items-center justify-center" aria-label="Toggle Navigation">
+            <i class="fa-solid fa-bars text-base" id="mobileMenuIcon"></i>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Mobile Drawer Menu -->
+    <div id="mobileNavDrawer" class="hidden xl:hidden bg-sc-midnight border-t border-white/10 px-4 pt-3 pb-6 space-y-2">
+      <a href="/flyers" class="block px-3 py-2 rounded-xl text-sc-emerald font-bold bg-white/10">Weekly Flyers</a>
+      <a href="/compare" target="_blank" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">Price Compare ↗</a>
+      <a href="/meals" target="_blank" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">Flyer Dinners & Meals ↗</a>
+      <a href="/optimizer" target="_blank" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">3-Plan Route Optimizer ↗</a>
+      <a href="/scanner" target="_blank" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">Barcode Lens ↗</a>
+      <a href="/savings" target="_blank" class="block px-3 py-2 rounded-xl text-white font-medium hover:bg-white/10">Savings Tracker ↗</a>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+    
+    <!-- Title & Location Header -->
+    <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-8 pb-6 border-b border-sc-border dark:border-sc-darkborder">
+      <div>
+        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold uppercase tracking-wider border border-emerald-500/20 mb-3">
+          <i class="fa-solid fa-tag text-sc-emerald"></i> Live Canadian Circulars & Weekly Ad Deals
+        </div>
+        <h1 class="text-3xl sm:text-4xl lg:text-5xl font-black text-sc-ink dark:text-white tracking-tight">
+          Weekly Supermarket Flyers
+        </h1>
+        <p class="mt-2 text-sc-muted dark:text-slate-400 text-sm sm:text-base max-w-2xl">
+          Browse digital weekly circulars from Walmart, No Frills, Real Canadian Superstore, FreshCo, Sobeys, Metro, and clip sale items directly into your SmartCart basket.
+        </p>
+      </div>
+
+      <!-- Quick Postal Search -->
+      <div class="flex flex-col sm:flex-row gap-3">
+        <div class="relative w-full sm:w-64">
+          <i class="fa-solid fa-location-dot absolute left-3.5 top-3.5 text-emerald-500 text-sm"></i>
+          <input 
+            type="text" 
+            id="flyerPostalInput" 
+            onkeydown="if(event.key==='Enter') updateFlyerLocationFromInput()" 
+            placeholder="City or Postal Code..." 
+            class="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder text-xs sm:text-sm text-sc-ink dark:text-white outline-none focus:ring-2 focus:ring-sc-emerald font-semibold"
+          >
+        </div>
+        <button 
+          onclick="updateFlyerLocationFromInput()" 
+          class="px-5 py-2.5 rounded-2xl bg-sc-navy dark:bg-sc-emerald text-white dark:text-sc-midnight font-bold text-xs sm:text-sm hover:brightness-110 transition-all whitespace-nowrap shadow-sm"
+        >
+          Update Market
+        </button>
+      </div>
+    </div>
+
+    <!-- Canadian Province & City Quick Selector Pills -->
+    <div class="p-4 sm:p-5 rounded-3xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder shadow-sm mb-8 space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="flex items-center gap-2">
+          <span class="font-black text-sc-ink dark:text-white uppercase tracking-wider">Active Market:</span>
+          <span id="flyerActiveMarketLabel" class="px-2.5 py-1 rounded-full bg-emerald-500/10 text-sc-emerald font-black">Edmonton, AB</span>
+        </div>
+        <span class="text-sc-muted dark:text-slate-400 font-semibold" id="flyerActiveCountLabel">Loading circulars...</span>
+      </div>
+
+      <!-- City Switcher Pills -->
+      <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-sc-border/60 dark:border-sc-darkborder/60">
+        <span class="text-[11px] font-bold text-sc-muted dark:text-slate-400 uppercase mr-1">Alberta:</span>
+        <button onclick="changeActiveCity('Edmonton')" class="city-pill px-3 py-1.5 rounded-xl text-xs font-bold bg-sc-navy dark:bg-sc-emerald text-white dark:text-sc-midnight transition-colors" data-city="Edmonton">Edmonton</button>
+        <button onclick="changeActiveCity('Calgary')" class="city-pill px-3 py-1.5 rounded-xl text-xs font-bold bg-sc-canvas dark:bg-sc-midnight text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder hover:bg-slate-100 transition-colors" data-city="Calgary">Calgary</button>
+        <button onclick="changeActiveCity('Red Deer')" class="city-pill px-3 py-1.5 rounded-xl text-xs font-bold bg-sc-canvas dark:bg-sc-midnight text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder hover:bg-slate-100 transition-colors" data-city="Red Deer">Red Deer</button>
+        <button onclick="changeActiveCity('Lethbridge')" class="city-pill px-3 py-1.5 rounded-xl text-xs font-bold bg-sc-canvas dark:bg-sc-midnight text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder hover:bg-slate-100 transition-colors" data-city="Lethbridge">Lethbridge</button>
+
+        <span class="text-[11px] font-bold text-sc-muted dark:text-slate-400 uppercase ml-2 mr-1">British Columbia:</span>
+        <button onclick="changeActiveCity('Vancouver')" class="city-pill px-3 py-1.5 rounded-xl text-xs font-bold bg-sc-canvas dark:bg-sc-midnight text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder hover:bg-slate-100 transition-colors" data-city="Vancouver">Vancouver</button>
+        <button onclick="changeActiveCity('Victoria')" class="city-pill px-3 py-1.5 rounded-xl text-xs font-bold bg-sc-canvas dark:bg-sc-midnight text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder hover:bg-slate-100 transition-colors" data-city="Victoria">Victoria</button>
+        <button onclick="changeActiveCity('Kelowna')" class="city-pill px-3 py-1.5 rounded-xl text-xs font-bold bg-sc-canvas dark:bg-sc-midnight text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder hover:bg-slate-100 transition-colors" data-city="Kelowna">Kelowna</button>
+
+        <span class="text-[11px] font-bold text-sc-muted dark:text-slate-400 uppercase ml-2 mr-1">Eastern:</span>
+        <button onclick="changeActiveCity('Toronto')" class="city-pill px-3 py-1.5 rounded-xl text-xs font-bold bg-sc-canvas dark:bg-sc-midnight text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder hover:bg-slate-100 transition-colors" data-city="Toronto">Toronto, ON</button>
+        <button onclick="changeActiveCity('Montreal')" class="city-pill px-3 py-1.5 rounded-xl text-xs font-bold bg-sc-canvas dark:bg-sc-midnight text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder hover:bg-slate-100 transition-colors" data-city="Montreal">Montreal, QC</button>
+      </div>
+    </div>
+
+    <!-- Active Weekly Circulars Carousel / Grid -->
+    <div class="mb-12">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-black text-xl text-sc-ink dark:text-white tracking-tight flex items-center gap-2">
+          <i class="fa-solid fa-book-open text-sc-emerald"></i>
+          <span>Active Supermarket Circulars</span>
+        </h3>
+        <span class="text-xs text-sc-muted dark:text-slate-400">Click any flyer to open full digital deals</span>
+      </div>
+      
+      <div id="weeklyCircularsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+
+    <!-- Deals Explorer Section -->
+    <div class="pt-6 border-t border-sc-border dark:border-sc-darkborder">
+      
+      <!-- Section Header -->
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
+        <div>
+          <h3 class="font-black text-2xl text-sc-ink dark:text-white tracking-tight">
+            Weekly Circular Deals Catalog
+          </h3>
+          <p class="text-xs sm:text-sm text-sc-muted dark:text-slate-400 mt-1">
+            Filter deals by banner or department. Prices match official circular publications.
+          </p>
+        </div>
+
+        <!-- Deals Search Bar -->
+        <div class="relative w-full md:w-80">
+          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-sc-muted text-sm"></i>
+          <input 
+            type="text" 
+            id="dealsSearchInput" 
+            oninput="handleDealsSearch()" 
+            placeholder="Search sale items (e.g. Bacon, Apples)..." 
+            class="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder text-sc-ink dark:text-white outline-none focus:ring-2 focus:ring-sc-emerald font-semibold"
+          >
+        </div>
+      </div>
+
+      <!-- Banner Filters -->
+      <div class="flex items-center gap-2 overflow-x-auto pb-3 mb-4 scrollbar-none text-xs">
+        <button onclick="setFlyerBanner('all')" class="flyer-banner-btn px-4 py-2 rounded-2xl font-black text-xs sm:text-sm transition-all whitespace-nowrap bg-sc-navy dark:bg-sc-emerald text-white dark:text-sc-midnight shadow-sm" data-banner="all">All Supermarkets</button>
+        <button onclick="setFlyerBanner('Walmart')" class="flyer-banner-btn px-4 py-2 rounded-2xl font-black text-xs sm:text-sm transition-all whitespace-nowrap bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder" data-banner="Walmart">Walmart</button>
+        <button onclick="setFlyerBanner('Real Canadian Superstore')" class="flyer-banner-btn px-4 py-2 rounded-2xl font-black text-xs sm:text-sm transition-all whitespace-nowrap bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder" data-banner="Real Canadian Superstore">Superstore</button>
+        <button onclick="setFlyerBanner('No Frills')" class="flyer-banner-btn px-4 py-2 rounded-2xl font-black text-xs sm:text-sm transition-all whitespace-nowrap bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder" data-banner="No Frills">No Frills</button>
+        <button onclick="setFlyerBanner('FreshCo')" class="flyer-banner-btn px-4 py-2 rounded-2xl font-black text-xs sm:text-sm transition-all whitespace-nowrap bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder" data-banner="FreshCo">FreshCo</button>
+        <button onclick="setFlyerBanner('Sobeys')" class="flyer-banner-btn px-4 py-2 rounded-2xl font-black text-xs sm:text-sm transition-all whitespace-nowrap bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder" data-banner="Sobeys">Sobeys</button>
+        <button onclick="setFlyerBanner('Safeway')" class="flyer-banner-btn px-4 py-2 rounded-2xl font-black text-xs sm:text-sm transition-all whitespace-nowrap bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder" data-banner="Safeway">Safeway</button>
+      </div>
+
+      <!-- Department Category Filter Pills -->
+      <div class="flex items-center gap-2 overflow-x-auto pb-4 mb-6 scrollbar-none text-xs">
+        <button onclick="setFlyerCategory('all')" class="flyer-cat-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-sc-navy dark:bg-sc-emerald text-white dark:text-sc-midnight" data-cat="all">All Departments</button>
+        <button onclick="setFlyerCategory('produce')" class="flyer-cat-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder" data-cat="produce">Fresh Produce</button>
+        <button onclick="setFlyerCategory('meat')" class="flyer-cat-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder" data-cat="meat">Meat & Seafood</button>
+        <button onclick="setFlyerCategory('dairy')" class="flyer-cat-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder" data-cat="dairy">Dairy & Refrigerated</button>
+        <button onclick="setFlyerCategory('bakery')" class="flyer-cat-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder" data-cat="bakery">Bakery & Bread</button>
+        <button onclick="setFlyerCategory('pantry')" class="flyer-cat-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder" data-cat="pantry">Pantry & Canned</button>
+        <button onclick="setFlyerCategory('snack')" class="flyer-cat-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder" data-cat="snack">Snacks & Drinks</button>
+      </div>
+
+      <!-- Flyer Deals Grid -->
+      <div id="flyerDealsGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5">
+        <!-- Loaded dynamically -->
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Full Digital Flyer Circular Detail Modal -->
+  <div id="flyerDetailModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-sc-darksurface rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-hidden border border-sc-border dark:border-sc-darkborder shadow-2xl flex flex-col">
+      <div class="p-6 border-b border-sc-border dark:border-sc-darkborder flex items-start justify-between bg-sc-canvas dark:bg-sc-midnight flex-shrink-0">
+        <div class="flex items-center gap-3.5">
+          <div id="modalFlyerLogoBadge" class="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center text-white font-black text-xs shadow-md uppercase">
+            FLYER
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 id="modalFlyerMerchant" class="text-xl font-black text-sc-ink dark:text-white">Store Name</h3>
+              <span id="modalFlyerBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400">Weekly Circular</span>
+            </div>
+            <p id="modalFlyerTitle" class="text-xs text-sc-muted dark:text-slate-400 mt-0.5">Circular title and validity dates</p>
+          </div>
+        </div>
+        <button onclick="closeFlyerModal()" class="w-8 h-8 rounded-full bg-slate-200 dark:bg-white/10 text-sc-ink dark:text-white flex items-center justify-center hover:bg-slate-300 transition-colors">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="p-6 overflow-y-auto flex-1 space-y-4">
+        <div class="flex items-center justify-between text-xs text-sc-muted dark:text-slate-400">
+          <span id="modalFlyerItemsCount">Loading deals...</span>
+          <button onclick="clipAllFlyerItemsToBasket()" class="px-4 py-2 rounded-xl bg-sc-emerald text-sc-midnight font-bold hover:brightness-110 text-xs transition-colors flex items-center gap-1.5 shadow-sm">
+            <i class="fa-solid fa-cart-arrow-down"></i> Clip All Deals to Basket
+          </button>
+        </div>
+        <div id="modalFlyerItemsGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide-Over Basket Drawer & Modals -->
+  <div id="basketDrawerBackdrop" onclick="closeBasketDrawer()" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden transition-opacity duration-300"></div>
+  <div id="basketDrawer" class="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white dark:bg-sc-darksurface shadow-2xl border-l border-sc-border dark:border-sc-darkborder flex flex-col transform translate-x-full transition-transform duration-300 ease-in-out">
+    <div class="p-5 border-b border-sc-border dark:border-sc-darkborder flex items-center justify-between bg-sc-canvas dark:bg-sc-midnight">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-sc-emerald/15 text-sc-emerald flex items-center justify-center text-lg font-black">
+          <i class="fa-solid fa-basket-shopping"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="font-black text-base text-sc-ink dark:text-white">My SmartCart Basket</h3>
+            <span id="drawerBadgeCount" class="px-2 py-0.5 rounded-full bg-sc-emerald text-sc-midnight font-black text-xs">0</span>
+          </div>
+          <p class="text-xs text-sc-muted dark:text-slate-400">Items staged for route optimization</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="clearBasket()" class="p-2 text-xs text-red-500 hover:text-red-700 font-bold hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-colors" title="Clear Basket">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>
+        <button onclick="closeBasketDrawer()" class="w-8 h-8 rounded-full bg-white dark:bg-white/10 text-sc-ink dark:text-white flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/20 transition-colors">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Quick Add Input in Drawer -->
+    <div class="p-3 bg-sc-canvas/50 dark:bg-sc-midnight/50 border-b border-sc-border dark:border-sc-darkborder">
+      <div class="flex gap-2">
+        <input type="text" id="drawerQuickAddInput" onkeydown="if(event.key==='Enter') handleDrawerQuickAdd()" placeholder="Add grocery item to basket..." class="flex-1 px-3 py-2 text-xs rounded-xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder text-sc-ink dark:text-white outline-none focus:ring-2 focus:ring-sc-emerald">
+        <button onclick="handleDrawerQuickAdd()" class="px-3 py-2 rounded-xl bg-sc-emerald hover:brightness-110 text-sc-midnight font-bold text-xs flex items-center gap-1">
+          <i class="fa-solid fa-plus"></i> Add
+        </button>
+      </div>
+    </div>
+
+    <!-- Basket Items List -->
+    <div id="drawerItemsList" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+
+    <!-- Drawer Footer -->
+    <div class="p-5 border-t border-sc-border dark:border-sc-darkborder bg-sc-canvas dark:bg-sc-midnight space-y-4">
+      <div class="space-y-1.5 text-xs">
+        <div class="flex justify-between text-sc-muted dark:text-slate-400">
+          <span>Shelf Regular Price</span>
+          <span id="drawerRegCost" class="line-through font-bold text-sc-ink dark:text-slate-300">$0.00</span>
+        </div>
+        <div class="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
+          <span>Estimated Flyer Savings</span>
+          <span id="drawerTotalSaved">-$0.00</span>
+        </div>
+        <div class="flex justify-between text-sm sm:text-base font-black text-sc-ink dark:text-white pt-1 border-t border-sc-border/60 dark:border-sc-darkborder/60">
+          <span>Estimated Total</span>
+          <span id="drawerTotalCost" class="text-sc-emerald tabular-nums">$0.00</span>
+        </div>
+      </div>
+
+      <button onclick="runOptimizerFromDrawer()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-110 text-sc-midnight font-black text-sm shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95">
+        <i class="fa-solid fa-route"></i>
+        <span>Run 3-Plan Route Optimizer ↗</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Floating Quick Cart Trigger -->
+  <div id="floatingBasketBtn" class="fixed bottom-6 right-6 z-40">
+    <button onclick="openBasketDrawer()" class="flex items-center gap-2.5 px-4 py-3 rounded-full bg-sc-emerald hover:brightness-110 text-sc-midnight font-black text-sm shadow-2xl transition-all transform hover:scale-105 active:scale-95 border-2 border-sc-midnight/20">
+      <i class="fa-solid fa-basket-shopping text-base"></i>
+      <span>My Basket</span>
+      <span id="floatingCartCountBadge" class="bg-sc-midnight text-white text-xs px-2 py-0.5 rounded-full font-bold">0</span>
+    </button>
+  </div>
+
+  <!-- Sync Modal -->
+  <div id="syncModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-lg rounded-3xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder shadow-2xl overflow-hidden p-6 space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-sc-border dark:border-sc-darkborder">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-arrows-rotate text-sc-emerald text-lg"></i>
+          <h3 class="font-black text-lg text-sc-ink dark:text-white">Canadian Supermarket Sync</h3>
+        </div>
+        <button onclick="closeSyncModal()" class="w-8 h-8 rounded-full bg-sc-canvas dark:bg-white/10 text-sc-ink dark:text-white flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <p class="text-xs text-sc-muted dark:text-slate-400">
+        SmartCart indexes weekly circulars across 35 Canadian chains every Thursday at 12:01 AM.
+      </p>
+      <div class="p-4 rounded-2xl bg-sc-canvas dark:bg-sc-midnight space-y-2 text-xs">
+        <div class="flex justify-between">
+          <span class="text-sc-muted dark:text-slate-400">Supermarket Stores Indexed:</span>
+          <span class="font-black text-sc-ink dark:text-white">3,524 Locations</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-sc-muted dark:text-slate-400">Current Flyer Cycle:</span>
+          <span class="font-black text-sc-emerald">Thursday to Wednesday</span>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 pt-2">
+        <button onclick="closeSyncModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-sc-muted hover:text-sc-ink dark:hover:text-white">Close</button>
+        <button id="syncModalTriggerBtn" onclick="triggerManualSync()" class="px-4 py-2 rounded-xl bg-sc-emerald text-sc-midnight font-bold text-xs hover:brightness-110">
+          <i class="fa-solid fa-rotate mr-1"></i> Force Refresh Now
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pro Modal -->
+  <div id="proModal" class="fixed inset-0 z-50 hidden bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-md rounded-3xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder p-6 shadow-2xl text-center space-y-4">
+      <div class="w-14 h-14 mx-auto rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-sc-midnight text-2xl font-black">
+        <i class="fa-solid fa-bolt"></i>
+      </div>
+      <h3 class="text-2xl font-black text-sc-ink dark:text-white">SmartCart PRO</h3>
+      <p class="text-xs text-sc-muted dark:text-slate-400">
+        Unlock automated grocery price alerts, multi-stop route optimization with fuel offsets, and barcode receipt audit tools.
+      </p>
+      <button onclick="closeProModal(); showToast('Pro account unlocked!')" class="w-full py-3 rounded-2xl bg-sc-emerald text-sc-midnight font-black text-sm hover:brightness-110">
+        Continue with Full Access
+      </button>
+    </div>
+  </div>
+
+  <!-- Shared Core Scripts -->
+  <script src="/static/js/shared.js"></script>
+
+  <!-- Page-Specific Flyers Logic -->
+  <script>
+    AppState.cityFlyers = [];
+    AppState.flyerDeals = [];
+    AppState.currentFlyerBanner = 'all';
+    AppState.currentFlyerCategory = 'all';
+    AppState.activeModalFlyerDeals = [];
+
+    function changeActiveCity(cityName) {
+      AppState.selectedCity = cityName;
+      try { localStorage.setItem('sc_city', cityName); } catch(e){}
+
+      document.querySelectorAll('.city-pill').forEach(btn => {
+        if (btn.dataset.city === cityName) {
+          btn.className = 'city-pill px-3 py-1.5 rounded-xl text-xs font-bold bg-sc-navy dark:bg-sc-emerald text-white dark:text-sc-midnight transition-colors';
+        } else {
+          btn.className = 'city-pill px-3 py-1.5 rounded-xl text-xs font-bold bg-sc-canvas dark:bg-sc-midnight text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder hover:bg-slate-100 transition-colors';
+        }
+      });
+
+      loadCityFlyersAndDeals(cityName);
+    }
+
+    function updateFlyerLocationFromInput() {
+      const input = document.getElementById('flyerPostalInput');
+      if (!input || !input.value.trim()) return;
+      const val = input.value.trim();
+      loadCityFlyersAndDeals(val);
+    }
+
+    async function loadCityFlyersAndDeals(location) {
+      try {
+        const res = await fetch(`/api/flyers?city=${encodeURIComponent(location)}`);
+        const data = await res.json();
+        
+        AppState.cityFlyers = data.flyers || [];
+        AppState.selectedProvince = data.province || 'Alberta';
+
+        const cityDisplay = data.city || location;
+        const provDisplay = data.province_code ? `${data.province_code}` : (data.province || 'Canada');
+        const count = AppState.cityFlyers.length;
+
+        const marketLbl = document.getElementById('flyerActiveMarketLabel');
+        if (marketLbl) marketLbl.innerText = `${cityDisplay}, ${provDisplay}`;
+
+        const countLbl = document.getElementById('flyerActiveCountLabel');
+        if (countLbl) countLbl.innerText = `${count} active flyers found`;
+
+        renderWeeklyCircularsGrid(AppState.cityFlyers);
+        await loadFlyerDeals();
+
+      } catch (err) {
+        console.error('Failed to load city flyers:', err);
+      }
+    }
+
+    function renderWeeklyCircularsGrid(flyers) {
+      const container = document.getElementById('weeklyCircularsGrid');
+      if (!container) return;
+
+      if (!flyers || flyers.length === 0) {
+        container.innerHTML = `
+          <div class="col-span-full py-12 text-center text-sc-muted dark:text-slate-400">
+            <i class="fa-solid fa-newspaper text-3xl mb-2 text-sc-emerald"></i>
+            <p class="font-bold">No active flyers found for this market right now.</p>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = flyers.map(f => {
+        const merchantEsc = (f.merchant || 'Store').replace(/'/g, "\\'");
+        const titleEsc = (f.title || 'Weekly Circular').replace(/'/g, "\\'");
+        const badgeColor = getBannerColorClass(f.merchant);
+        const thumb = f.thumbnail_url;
+        const validDates = f.valid_to ? `Valid to ${f.valid_to}` : 'This Week';
+
+        return `
+          <div onclick="openFlyerModal('${f.id}', '${merchantEsc}', '${titleEsc}')" class="sc-card group cursor-pointer p-3.5 rounded-3xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder hover:border-sc-emerald hover:shadow-lg transition-all flex flex-col justify-between">
+            <div>
+              <div class="w-full h-36 rounded-2xl bg-slate-100 dark:bg-slate-800/80 overflow-hidden relative flex items-center justify-center mb-3 group-hover:scale-[1.02] transition-transform">
+                ${thumb ? `
+                  <img src="${thumb}" alt="${f.merchant}" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                  <div class="hidden w-full h-full items-center justify-center font-black text-sm uppercase p-2 text-center ${badgeColor}">
+                    ${f.merchant}
+                  </div>
+                ` : `
+                  <div class="w-full h-full flex flex-col items-center justify-center font-black text-sm uppercase p-2 text-center ${badgeColor}">
+                    <span>${f.merchant}</span>
+                    <span class="text-[10px] opacity-80 mt-1 font-semibold">Weekly Circular</span>
+                  </div>
+                `}
+                <span class="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-500 text-sc-midnight shadow-sm">
+                  LIVE
+                </span>
+              </div>
+
+              <div class="space-y-1">
+                <div class="flex items-center gap-1.5">
+                  <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tight ${badgeColor}">
+                    ${f.merchant}
+                  </span>
+                </div>
+                <h4 class="font-bold text-xs sm:text-sm text-sc-ink dark:text-white line-clamp-1 mt-1 group-hover:text-sc-emerald transition-colors">
+                  ${f.title}
+                </h4>
+                <p class="text-[11px] text-sc-muted dark:text-slate-400">
+                  <i class="fa-regular fa-calendar text-[10px] mr-1"></i>${validDates}
+                </p>
+              </div>
+            </div>
+
+            <button class="mt-3 w-full py-1.5 rounded-xl bg-sc-canvas dark:bg-sc-midnight group-hover:bg-sc-emerald group-hover:text-sc-midnight text-sc-ink dark:text-white font-bold text-xs transition-colors flex items-center justify-center gap-1">
+              <span>View Deals</span>
+              <i class="fa-solid fa-arrow-right text-[10px]"></i>
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function loadFlyerDeals() {
+      try {
+        const res = await fetch(`/api/flyers/deals?banner=${encodeURIComponent(AppState.currentFlyerBanner)}`);
+        const data = await res.json();
+        AppState.flyerDeals = data.deals || [];
+        renderFlyerDeals();
+      } catch (e) {
+        console.error('Failed to load deals', e);
+      }
+    }
+
+    function renderFlyerDeals() {
+      const grid = document.getElementById('flyerDealsGrid');
+      let filtered = AppState.flyerDeals;
+
+      if (AppState.currentFlyerCategory !== 'all') {
+        filtered = filtered.filter(d => (d.category || '').toLowerCase().includes(AppState.currentFlyerCategory.toLowerCase()));
+      }
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full py-12 text-center text-sc-muted dark:text-slate-400">
+            <i class="fa-solid fa-tag text-3xl mb-2 text-sc-emerald"></i>
+            <p class="font-bold">No deals found for this department.</p>
+          </div>`;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(d => {
+        const discountMatch = d.discount_text && d.discount_text.match(/\d+%/);
+        const discountBadge = discountMatch ? `−${discountMatch[0]}` : (d.original_price ? `−${Math.round((d.original_price - d.sale_price)/d.original_price * 100)}%` : 'SALE');
+        
+        return `
+          <div class="sc-card spotlight-card p-5 rounded-3xl bg-white dark:bg-sc-darksurface border border-sc-border dark:border-sc-darkborder flex flex-col justify-between shadow-sm transition-all hover:border-sc-emerald/40">
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-xs font-black">
+                  ${discountBadge}
+                </span>
+                <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${getBannerColorClass(d.banner)}">
+                  ${d.banner ? d.banner.split(' ')[0] : 'Store'}
+                </span>
+              </div>
+
+              <div>
+                <h4 class="font-bold text-sm sm:text-base text-sc-ink dark:text-white line-clamp-2 leading-snug">${d.name}</h4>
+                <div class="text-xs text-sc-muted dark:text-slate-400 mt-1">${d.package_size || d.category || 'Grocery'}</div>
+              </div>
+
+              <div class="pt-1">
+                <div class="flex items-baseline gap-2">
+                  <span class="text-xl sm:text-2xl font-black text-sc-emerald tabular-nums">$${Number(d.sale_price).toFixed(2)}</span>
+                  ${d.original_price ? `<span class="text-xs sm:text-sm text-slate-400 line-through tabular-nums">$${Number(d.original_price).toFixed(2)}</span>` : ''}
+                </div>
+                ${d.std_price ? `<div class="text-xs text-sc-muted dark:text-slate-400 font-semibold mt-0.5">${d.std_price}</div>` : ''}
+              </div>
+            </div>
+
+            <button onclick="addSingleDealToBasket('${d.name.replace(/'/g, "\\'")}', ${d.sale_price}, ${d.original_price || d.sale_price}, '${d.banner}', '${d.category}', '${d.package_size || 'unit'}')" class="mt-4 w-full py-2.5 rounded-xl bg-sc-canvas dark:bg-sc-midnight hover:bg-sc-emerald hover:text-sc-midnight text-sc-ink dark:text-white font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 active:scale-95 shadow-sm">
+              <i class="fa-solid fa-plus text-xs"></i>
+              <span>Add to Basket</span>
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function setFlyerBanner(banner) {
+      AppState.currentFlyerBanner = banner;
+      document.querySelectorAll('.flyer-banner-btn').forEach(btn => {
+        if (btn.dataset.banner === banner) {
+          btn.className = `flyer-banner-btn px-4 py-2 rounded-2xl font-black text-xs sm:text-sm transition-all whitespace-nowrap ${getBannerColorClass(banner)} shadow-sm`;
+        } else {
+          btn.className = 'flyer-banner-btn px-4 py-2 rounded-2xl font-black text-xs sm:text-sm transition-all whitespace-nowrap bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder';
+        }
+      });
+      loadFlyerDeals();
+    }
+
+    function setFlyerCategory(cat) {
+      AppState.currentFlyerCategory = cat;
+      document.querySelectorAll('.flyer-cat-btn').forEach(btn => {
+        if (btn.dataset.cat === cat) {
+          btn.className = 'flyer-cat-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-sc-navy dark:bg-sc-emerald text-white dark:text-sc-midnight';
+        } else {
+          btn.className = 'flyer-cat-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-white dark:bg-sc-darksurface text-sc-ink dark:text-white border border-sc-border dark:border-sc-darkborder';
+        }
+      });
+      renderFlyerDeals();
+    }
+
+    function handleDealsSearch() {
+      const q = document.getElementById('dealsSearchInput').value.toLowerCase().trim();
+      if (!q) {
+        renderFlyerDeals();
+        return;
+      }
+      const grid = document.getElementById('flyerDealsGrid');
+      const matches = AppState.flyerDeals.filter(d => (d.name || '').toLowerCase().includes(q) || (d.category || '').toLowerCase().includes(q));
+      if (matches.length === 0) {
+        grid.innerHTML = `<div class="col-span-full py-12 text-center text-sc-muted">No deals matched "${q}".</div>`;
+        return;
+      }
+      const prevDeals = AppState.flyerDeals;
+      AppState.flyerDeals = matches;
+      renderFlyerDeals();
+      AppState.flyerDeals = prevDeals;
+    }
+
+    function addSingleDealToBasket(name, salePrice, regPrice, banner, cat, size) {
+      AppState.basket.push({
+        name: name,
+        price: Number(salePrice),
+        reg_price: Number(regPrice) || Number(salePrice),
+        qty: 1,
+        store: banner,
+        category: cat,
+        package_size: size,
+        is_on_sale: true
+      });
+      saveBasket();
+      showToast(`Added "${name}" from ${banner} to basket!`);
+    }
+
+    async function openFlyerModal(flyerId, merchant, title) {
+      const modal = document.getElementById('flyerDetailModal');
+      const badge = document.getElementById('modalFlyerLogoBadge');
+      const merchEl = document.getElementById('modalFlyerMerchant');
+      const titleEl = document.getElementById('modalFlyerTitle');
+      const itemsCountEl = document.getElementById('modalFlyerItemsCount');
+      const grid = document.getElementById('modalFlyerItemsGrid');
+
+      badge.className = `w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xs shadow-md uppercase ${getBannerColorClass(merchant)}`;
+      badge.innerText = merchant.substring(0, 3);
+      merchEl.innerText = merchant;
+      titleEl.innerText = title;
+      itemsCountEl.innerText = 'Loading deals...';
+      grid.innerHTML = `<div class="col-span-full py-8 text-center"><i class="fa-solid fa-circle-notch fa-spin text-2xl text-sc-emerald"></i></div>`;
+
+      modal.classList.remove('hidden');
+
+      try {
+        const res = await fetch(`/api/flyers/${encodeURIComponent(flyerId)}/items`);
+        const data = await res.json();
+        const items = data.items || [];
+        AppState.activeModalFlyerDeals = items;
+
+        itemsCountEl.innerText = `${items.length} featured sale items in this flyer`;
+
+        if (items.length === 0) {
+          grid.innerHTML = `<div class="col-span-full py-6 text-center text-sc-muted">No parsed items found in this circular.</div>`;
+          return;
+        }
+
+        grid.innerHTML = items.map(item => `
+          <div class="p-3.5 rounded-2xl bg-sc-canvas dark:bg-sc-midnight border border-sc-border dark:border-sc-darkborder flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between text-xs font-bold">
+                <span class="text-sc-emerald font-black">$${(item.sale_price || item.current_price || 0).toFixed(2)}</span>
+                ${item.original_price ? `<span class="line-through text-slate-400">$${item.original_price.toFixed(2)}</span>` : ''}
+              </div>
+              <h5 class="text-xs font-bold text-sc-ink dark:text-white line-clamp-2 mt-1">${item.name}</h5>
+            </div>
+            <button onclick="addSingleDealToBasket('${item.name.replace(/'/g, "\\'")}', ${item.sale_price || item.current_price}, ${item.original_price || item.sale_price}, '${merchant}', '${item.category || 'Grocery'}', '${item.unit_size || ''}')" class="mt-3 py-1.5 rounded-xl bg-sc-emerald text-sc-midnight font-bold text-xs hover:brightness-110 flex items-center justify-center gap-1">
+              <i class="fa-solid fa-plus text-[10px]"></i> Clip Deal
+            </button>
+          </div>
+        `).join('');
+
+      } catch (err) {
+        console.error('Failed to load flyer deals', err);
+        itemsCountEl.innerText = 'Failed to load deals';
+      }
+    }
+
+    function closeFlyerModal() {
+      const modal = document.getElementById('flyerDetailModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function clipAllFlyerItemsToBasket() {
+      const items = AppState.activeModalFlyerDeals || [];
+      if (items.length === 0) return;
+      items.forEach(it => {
+        AppState.basket.push({
+          name: it.name,
+          price: Number(it.sale_price || it.current_price || 2.99),
+          reg_price: Number(it.original_price || it.sale_price || 3.99),
+          qty: 1,
+          store: document.getElementById('modalFlyerMerchant').innerText || 'Supermarket',
+          category: it.category || 'Grocery',
+          is_on_sale: true
+        });
+      });
+      saveBasket();
+      closeFlyerModal();
+      showToast(`Clipped ${items.length} flyer deals to your basket!`);
+    }
+
+    window.closeAllPageModals = function() {
+      closeFlyerModal();
+    };
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      const city = AppState.selectedCity || 'Edmonton';
+      changeActiveCity(city);
+    });
+  </script>
+</body>
+</html>

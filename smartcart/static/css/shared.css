@@ -1,0 +1,103 @@
+/* SmartCart Shared Styles */
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #F8FAFC;
+  color: #0F172A;
+  font-family: 'DM Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  line-height: 1.6;
+}
+
+.dark body {
+  background-color: #0B0F19;
+  color: #F1F5F9;
+}
+
+/* Spotlight Card Hover Effect */
+.spotlight-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.spotlight-card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  background: radial-gradient(650px circle at var(--mouse-x, -999px) var(--mouse-y, -999px), rgba(16, 185, 129, 0.12), transparent 45%);
+  opacity: var(--spotlight-opacity, 0);
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.spotlight-card:hover {
+  --spotlight-opacity: 1;
+}
+
+/* Shiny Shimmer Text & Badge */
+@keyframes shinyShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.shiny-badge {
+  background: linear-gradient(110deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.2) 45%, rgba(16,185,129,0.3) 50%, rgba(255,255,255,0.2) 55%, rgba(255,255,255,0.06) 100%);
+  background-size: 200% auto;
+  animation: shinyShimmer 5s linear infinite;
+}
+
+.shiny-text {
+  background: linear-gradient(110deg, #94a3b8 0%, #ffffff 40%, #10b981 50%, #ffffff 60%, #94a3b8 100%);
+  background-size: 200% auto;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: shinyShimmer 6s linear infinite;
+}
+
+/* Laser Scan Line for Barcode Lens */
+@keyframes laserScan {
+  0% { top: 5%; opacity: 0.8; }
+  50% { top: 90%; opacity: 1; }
+  100% { top: 5%; opacity: 0.8; }
+}
+
+.scan-laser-line {
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  height: 2px;
+  background: #10B981;
+  box-shadow: 0 0 12px #10B981, 0 0 24px #34D399;
+  animation: laserScan 2.4s ease-in-out infinite;
+  z-index: 20;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.35);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.6);
+}
