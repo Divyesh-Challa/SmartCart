@@ -8,7 +8,7 @@ The source of truth for resuming work. The full roadmap is in `~/.claude/plans/r
 - Never add synthetic or invented data that users would see.
 - Run `venv/bin/python -m pytest -q` before every commit. When DB code changes, also run it against Postgres:
   `docker start smartcart-pg-test` (or `docker run -d --name smartcart-pg-test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=smartcart_test -p 55432:5432 postgres:17-alpine`)
-  then `SMARTCART_DATABASE_URL=postgresql://postgres:test@localhost:55432/smartcart_test venv/bin/python -m pytest -q`
+  then `SMARTCART_TEST_DATABASE_URL=postgresql://postgres:test@localhost:55432/smartcart_test venv/bin/python -m pytest -q`
 - Commit and push after each step, and update this file.
 
 ## Branches

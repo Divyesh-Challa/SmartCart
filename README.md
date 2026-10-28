@@ -110,7 +110,7 @@ venv/bin/alembic revision -m "describe change"            # new migration (edit 
 venv/bin/ruff check .
 venv/bin/python -m pytest -q                              # SQLite
 docker run -d --name smartcart-pg-test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=smartcart_test -p 55432:5432 postgres:17-alpine
-SMARTCART_DATABASE_URL=postgresql://postgres:test@localhost:55432/smartcart_test venv/bin/python -m pytest -q
+SMARTCART_TEST_DATABASE_URL=postgresql://postgres:test@localhost:55432/smartcart_test venv/bin/python -m pytest -q
 cd web && npm test && npm run build
 ```
 

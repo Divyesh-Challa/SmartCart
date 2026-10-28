@@ -37,7 +37,7 @@ jobs:
       - run: ruff check .
       - name: Run tests
         env:
-          SMARTCART_DATABASE_URL: ${{ matrix.database == 'postgres' && 'postgresql://postgres:test@localhost:5432/smartcart_test' || '' }}
+          SMARTCART_TEST_DATABASE_URL: ${{ matrix.database == 'postgres' && 'postgresql://postgres:test@localhost:5432/smartcart_test' || '' }}
         run: python -m pytest -q
 
   docker:

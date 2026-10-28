@@ -151,7 +151,10 @@ class PostgresConnection:
         import psycopg
         from psycopg.rows import dict_row
 
-        self._conn = psycopg.connect(re.sub(r"^postgresql\+psycopg://", "postgresql://", url), row_factory=dict_row)
+        # prepare_threshold=None: no server-side prepared statements, which
+        # connection poolers such as Supabase's Supavisor don't support.
+        self._conn = psycopg.connect(re.sub(r"^postgresql\+psycopg://", "postgresql://", url),
+                                     row_factory=dict_row, prepare_threshold=None)
 
     def cursor(self) -> PostgresCursor:
         return PostgresCursor(self._conn.cursor())
