@@ -25,6 +25,7 @@ import httpx
 from smartcart.database import (
     PRICE_OBSERVATION_WINDOW_DAYS,
     bootstrap_database,
+    close_pools,
     get_connection,
     haversine_distance_km,
 )
@@ -73,6 +74,7 @@ async def lifespan(app: FastAPI):
     yield
     if worker is not None:
         worker.cancel()
+    close_pools()
 
 
 app = FastAPI(

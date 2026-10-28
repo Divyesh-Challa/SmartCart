@@ -146,15 +146,38 @@ class PostgresCursor:
     def rowcount(self) -> int:
         return self._cur.rowcount
 
-class PostgresConnection:
-    def __init__(self, url: str):
-        import psycopg
-        from psycopg.rows import dict_row
+_POOLS: Dict[str, Any] = {}
 
-        # prepare_threshold=None: no server-side prepared statements, which
-        # connection poolers such as Supabase's Supavisor don't support.
-        self._conn = psycopg.connect(re.sub(r"^postgresql\+psycopg://", "postgresql://", url),
-                                     row_factory=dict_row, prepare_threshold=None)
+def _pool_for(url: str):
+    """One process-wide connection pool per database URL, created on first use."""
+    pool = _POOLS.get(url)
+    if pool is None:
+        from psycopg.rows import dict_row
+        from psycopg_pool import ConnectionPool
+
+        pool = ConnectionPool(
+            re.sub(r"^postgresql\+psycopg://", "postgresql://", url),
+            min_size=1,
+            max_size=int(os.environ.get("SMARTCART_DB_POOL_SIZE", "10")),
+            # prepare_threshold=None: no server-side prepared statements, which
+            # connection poolers such as Supabase's Supavisor don't support.
+            kwargs={"row_factory": dict_row, "prepare_threshold": None},
+            open=True,
+        )
+        _POOLS[url] = pool
+    return pool
+
+def close_pools() -> None:
+    for pool in _POOLS.values():
+        pool.close()
+    _POOLS.clear()
+
+class PostgresConnection:
+    """A pooled psycopg connection; close() rolls back anything uncommitted and returns it to the pool."""
+
+    def __init__(self, url: str):
+        self._pool = _pool_for(url)
+        self._conn = self._pool.getconn()
 
     def cursor(self) -> PostgresCursor:
         return PostgresCursor(self._conn.cursor())
@@ -175,7 +198,19 @@ class PostgresConnection:
         self._conn.rollback()
 
     def close(self) -> None:
-        self._conn.close()
+        if self._conn is None:
+            return
+        if not self._conn.closed:
+            self._conn.rollback()
+        self._pool.putconn(self._conn)
+        self._conn = None
+
+    def __del__(self):
+        # Safety net for code paths that return early without close().
+        try:
+            self.close()
+        except Exception:  # noqa: S110 - interpreter shutdown or pool already closed
+            pass
 
 def init_db() -> None:
     """Bring the schema up to date by running Alembic migrations."""
