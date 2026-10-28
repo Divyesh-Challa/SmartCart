@@ -7,7 +7,6 @@ database-backed flyers, and the interim admin guard on flyer uploads.
 import base64
 import datetime
 import json
-import os
 import sys
 import tempfile
 import unittest

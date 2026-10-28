@@ -40,7 +40,7 @@ CANADIAN_CITIES_TABLE = {
     "st albert": {"name": "St. Albert", "province": "Alberta", "province_code": "AB", "fsa": "T8N", "postal_code": "T8N 4K6", "lat": 53.6331, "lon": -113.6268},
     "sherwood park": {"name": "Sherwood Park", "province": "Alberta", "province_code": "AB", "fsa": "T8A", "postal_code": "T8A 0A1", "lat": 53.5358, "lon": -113.3182},
     "fort mcmurray": {"name": "Fort McMurray", "province": "Alberta", "province_code": "AB", "fsa": "T9H", "postal_code": "T9H 1K1", "lat": 56.7264, "lon": -111.3803},
-    
+
     # British Columbia
     "vancouver": {"name": "Vancouver", "province": "British Columbia", "province_code": "BC", "fsa": "V6B", "postal_code": "V6B 1A1", "lat": 49.2827, "lon": -123.1207},
     "victoria": {"name": "Victoria", "province": "British Columbia", "province_code": "BC", "fsa": "V8W", "postal_code": "V8W 1P6", "lat": 48.4284, "lon": -123.3656},
@@ -51,7 +51,7 @@ CANADIAN_CITIES_TABLE = {
     "abbotsford": {"name": "Abbotsford", "province": "British Columbia", "province_code": "BC", "fsa": "V2S", "postal_code": "V2S 1B1", "lat": 49.0504, "lon": -122.3045},
     "nanaimo": {"name": "Nanaimo", "province": "British Columbia", "province_code": "BC", "fsa": "V9R", "postal_code": "V9R 5H1", "lat": 49.1659, "lon": -123.9401},
     "kamloops": {"name": "Kamloops", "province": "British Columbia", "province_code": "BC", "fsa": "V2C", "postal_code": "V2C 1A1", "lat": 50.6745, "lon": -120.3273},
-    
+
     # Canada Wide
     "toronto": {"name": "Toronto", "province": "Ontario", "province_code": "ON", "fsa": "M5V", "postal_code": "M5V 2T6", "lat": 43.6532, "lon": -79.3832},
     "montreal": {"name": "Montreal", "province": "Quebec", "province_code": "QC", "fsa": "H2X", "postal_code": "H2X 1Y4", "lat": 45.5017, "lon": -73.5673},
@@ -168,11 +168,11 @@ EXACT_POSTAL_CODES = {
     "T5K2X4": {"name": "Oliver", "city": "Edmonton", "province": "Alberta", "lat": 53.5469, "lon": -113.5147},
     "T6X1N2": {"name": "Southeast Edmonton", "city": "Edmonton", "province": "Alberta", "lat": 53.4215, "lon": -113.4682},
     "T6N1J8": {"name": "South Edmonton Common", "city": "Edmonton", "province": "Alberta", "lat": 53.4508, "lon": -113.4883},
-    
+
     # Calgary
     "T2P1J9": {"name": "Calgary City Centre", "city": "Calgary", "province": "Alberta", "lat": 51.0486, "lon": -114.0708},
     "T2H2V9": {"name": "Chinook / Meadowlark Park", "city": "Calgary", "province": "Alberta", "lat": 50.9980, "lon": -114.0680},
-    
+
     # Vancouver
     "V6B1A1": {"name": "Vancouver Robson & Granville Core", "city": "Vancouver", "province": "British Columbia", "lat": 49.2827, "lon": -123.1207},
     "V5X3X8": {"name": "Marpole / Marine Gateway", "city": "Vancouver", "province": "British Columbia", "lat": 49.2130, "lon": -123.1020},

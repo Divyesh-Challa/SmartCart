@@ -25,9 +25,9 @@ The source of truth for resuming work. The full roadmap is in `~/.claude/plans/r
 - [x] Account profile, CASL consent timestamp, export, delete (de-identifies price reports)
 - [x] Admin: flyer entry, moderation, upload guard; /api/sync/refresh admin-only
 - [x] Security headers, body size limit, CORS, rate limiting, /healthz, logging, Sentry hook, lifespan, standalone worker
-- [ ] `.env.example`, Dockerfile hardening (non-root, proxy headers), render.yaml/fly.toml for web + worker (no deploy)
+- [x] `.env.example`, Dockerfile hardening (non-root, proxy headers), render.yaml/fly.toml for web + worker (no deploy)
 - [ ] GitHub Actions CI: pytest on SQLite + Postgres service, ruff, web build/test
-- [ ] Ruff lint pass (fix issues without behaviour changes)
+- [ ] Ruff lint pass: config + safe autofixes done; ~12 manual findings left (`venv/bin/ruff check .`)
 - [ ] Phase 3: React + Vite + TS PWA in `web/` (branch `feat/pwa-frontend`)
   - [ ] Scaffold: Vite, React, TS, Tailwind (compiled), react-router, vite-plugin-pwa, Vitest
   - [ ] API client + Supabase auth client (works disabled when env missing)
@@ -40,3 +40,4 @@ The source of truth for resuming work. The full roadmap is in `~/.claude/plans/r
 
 ## Log
 - Phase 2 backend work is committed on `feat/backend-hardening`: 71 tests pass on SQLite and Postgres.
+- Deploy configs (.env.example, non-root Dockerfile verified, render.yaml web+worker, scheduler_once) and pyproject/ruff are committed. Next: finish ruff, then CI, then the PWA.

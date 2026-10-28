@@ -26,12 +26,12 @@ def get_current_flyer_cycle() -> Dict[str, Any]:
     now = datetime.datetime.now()
     # weekday(): Monday=0, Tuesday=1, Wednesday=2, Thursday=3, Friday=4, Saturday=5, Sunday=6
     day_of_week = now.weekday()
-    
+
     # Calculate days since most recent Thursday (weekday 3)
     days_since_thursday = (day_of_week - 3) % 7
     cycle_start = now - datetime.timedelta(days=days_since_thursday)
     cycle_end = cycle_start + datetime.timedelta(days=6)
-    
+
     days_remaining = (cycle_end.date() - now.date()).days
     if days_remaining < 0:
         days_remaining = 0
@@ -222,5 +222,5 @@ async def background_sync_worker(interval_seconds: int = DEFAULT_SYNC_INTERVAL_S
             log.info("Sync completed: %s stores, %s prices rebuilt", result['stores_count'], result['inventory_prices_rebuilt'])
         except Exception as e:
             log.exception("Scheduled sync failed: %s", e)
-        
+
         await asyncio.sleep(interval_seconds)

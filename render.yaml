@@ -1,10 +1,44 @@
+# Render blueprint: API web service + background worker. Secrets are set in the
+# Render dashboard (sync: false), never in this file.
 services:
   - type: web
-    name: smartcart
-    runtime: python
+    name: smartcart-api
+    runtime: docker
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn smartcart.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    autoDeploy: false
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.12.0
+      - key: SMARTCART_ENVIRONMENT
+        value: production
+      - key: SMARTCART_RUN_SCHEDULER
+        value: "false"
+      - key: SMARTCART_DATABASE_URL
+        sync: false
+      - key: SMARTCART_SUPABASE_URL
+        sync: false
+      - key: SMARTCART_SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SMARTCART_ADMIN_TOKEN
+        sync: false
+      - key: SMARTCART_SENTRY_DSN
+        sync: false
+      - key: SMARTCART_CORS_ORIGINS
+        sync: false
+
+  # Background workers are not available on Render's free plan. Until the
+  # worker can run, either set SMARTCART_RUN_SCHEDULER=true on the web service
+  # (single instance only) or schedule `python -m smartcart.scheduler_once`
+  # via a cron job.
+  - type: worker
+    name: smartcart-worker
+    runtime: docker
+    plan: starter
+    dockerCommand: python -m smartcart.worker
+    autoDeploy: false
+    envVars:
+      - key: SMARTCART_ENVIRONMENT
+        value: production
+      - key: SMARTCART_DATABASE_URL
+        sync: false
+      - key: SMARTCART_SENTRY_DSN
+        sync: false

@@ -4,9 +4,7 @@ Covers database seeding, recipe parsing, unit price normalization,
 postal code geocoding, Edmonton-wide stores, and interactive weekly digital circulars.
 """
 
-import os
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -21,12 +19,9 @@ from tests.fixtures.synthetic_data import seed_synthetic_data as seed_edmonton_d
 from smartcart.parser import parse_ingredient_line, parse_recipe_text
 from smartcart.normalizer import (
     normalize_quantity_to_standard,
-    match_product_in_catalog,
-    compute_packages_needed,
-    get_product_prices_across_stores
+    match_product_in_catalog
 )
 from smartcart.geocoding import resolve_postal_code
-from smartcart.optimizer import BasketOptimizer
 from fastapi.testclient import TestClient
 from smartcart.main import app
 
@@ -316,14 +311,14 @@ class TestSmartCartEnhancementsTDD(unittest.TestCase):
         self.assertIn("data", body)
         recipes = body["data"]
         self.assertGreaterEqual(len(recipes), 1)
-        
+
         recipe = recipes[0]
         self.assertIn("title", recipe)
         self.assertIn("total_sale_cost", recipe)
         self.assertIn("total_regular_cost", recipe)
         self.assertIn("total_savings", recipe)
         self.assertIn("ingredients", recipe)
-        
+
         # At least one ingredient must be annotated as on sale with store metadata
         has_sale_ing = any(ing.get("is_on_sale") and ing.get("store_name") for ing in recipe["ingredients"])
         self.assertTrue(has_sale_ing, "Recipe must annotate ingredients on sale with store_name")
@@ -340,7 +335,7 @@ class TestSmartCartEnhancementsTDD(unittest.TestCase):
         self.assertIn("name", first_group)
         self.assertIn("stores", first_group)
         self.assertGreaterEqual(len(first_group["stores"]), 1)
-        
+
         first_store = first_group["stores"][0]
         self.assertIn("store_name", first_store)
         self.assertIn("banner", first_store)
@@ -398,7 +393,7 @@ class TestSmartCartEnhancementsTDD(unittest.TestCase):
         self.assertIn("data", data_edm)
         self.assertIn("location", data_edm)
         self.assertEqual(data_edm["location"]["postal_code"], "T5K 2X4")
-        
+
         # All stores in Edmonton search must be within 25 km and have distance_km
         for prod in data_edm["data"]:
             for st in prod["stores"]:

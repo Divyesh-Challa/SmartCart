@@ -8,7 +8,6 @@ deterministic dataset. It must never be loaded into a database users can see.
 """
 
 import datetime
-import json
 from typing import List
 
 from smartcart.database import (
@@ -87,7 +86,7 @@ def seed_dealdish_tables(conn):
 
     cursor.execute("SELECT id FROM products")
     valid_prod_ids = {r["id"] for r in cursor.fetchall()}
-    
+
     if "Metro" not in existing_banners:
         cursor.execute("""
             INSERT INTO flyers (banner, title, total_pages, valid_from, valid_to, badge_text, color_theme)
@@ -302,7 +301,7 @@ def seed_synthetic_data(force: bool = False):
     cursor.execute("DELETE FROM price_observations")
     cursor.execute("DELETE FROM store_inventory")
     cursor.execute("DELETE FROM stores")
-    
+
     stores = generate_canadian_store_network()
     cursor.executemany("""
     INSERT INTO stores (name, banner, address, city, postal_code, quadrant, latitude, longitude, requires_membership)
@@ -588,7 +587,7 @@ def seed_synthetic_data(force: bool = False):
         u_size = extract_unit_size(r["title"])
         cursor.execute("UPDATE flyer_deals SET unit_size = ? WHERE id = ?", (u_size, r["id"]))
 
-    
+
     # 5. Seed Flyer-To-Dinner Recipes
     cursor.execute("SELECT COUNT(*) as count FROM flyer_recipes")
     if cursor.fetchone()["count"] == 0:

@@ -28,7 +28,7 @@ from smartcart.database import (
     get_connection,
     haversine_distance_km,
 )
-from smartcart.parser import parse_recipe_text, parse_ingredient_line
+from smartcart.parser import parse_recipe_text
 from smartcart.normalizer import match_product_in_catalog, get_product_prices_across_stores, normalize_barcode
 from smartcart.optimizer import BasketOptimizer, DEFAULT_USER_LAT, DEFAULT_USER_LON
 from smartcart.geocoding import resolve_postal_code
@@ -43,8 +43,7 @@ from smartcart.flyers_service import (
 from smartcart.scheduler import (
     background_sync_worker,
     perform_data_sync,
-    get_sync_status,
-    get_current_flyer_cycle
+    get_sync_status
 )
 from smartcart.meal_generator import generate_flyer_grounded_meal_plan
 from smartcart.auth import CurrentUser, get_optional_user, require_admin_user
@@ -726,21 +725,21 @@ def get_stores(
 
     conn = get_connection()
     cursor = conn.cursor()
-    
+
     query = "SELECT id, name, banner, address, city, postal_code, quadrant, latitude, longitude, requires_membership FROM stores"
     conditions = []
     params = []
-    
+
     if quadrant:
         conditions.append("quadrant = ?")
         params.append(quadrant)
     if city and city.lower() != "all":
         conditions.append("LOWER(city) LIKE ?")
         params.append(f"%{city.lower()}%")
-        
+
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
-        
+
     cursor.execute(query, params)
     stores = [dict(row) for row in cursor.fetchall()]
     conn.close()

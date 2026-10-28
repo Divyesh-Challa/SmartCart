@@ -8,7 +8,7 @@ Generates:
 3. In-Stock Guaranteed (Zero out-of-stock risk)
 """
 
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 import math
 import time
 from itertools import combinations, permutations

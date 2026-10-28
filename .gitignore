@@ -10,3 +10,6 @@ __pycache__/
 smartcart/static/uploads/flyers/*
 !smartcart/static/uploads/flyers/.gitkeep
 .agents/
+.env
+.env.*
+!.env.example
