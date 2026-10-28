@@ -44,6 +44,8 @@ class PriceSubmission(BaseModel):
 
 
 def _review_status(conn, user: CurrentUser, store_id: int, product_id: Optional[int], price: float) -> str:
+    if user.is_admin:
+        return "accepted"
     if user.trust_score < REVIEW_TRUST_THRESHOLD:
         return "pending"
     if product_id is None:
@@ -60,7 +62,8 @@ def _review_status(conn, user: CurrentUser, store_id: int, product_id: Optional[
 
 
 @router.post("/prices/observations", status_code=201)
-@limiter.limit(lambda: get_settings().rate_limit_price_submissions)
+@limiter.limit(lambda: get_settings().rate_limit_price_submissions,
+               exempt_when=lambda request: getattr(request.state, "is_admin", False))
 def submit_price(request: Request, body: PriceSubmission, user: CurrentUser = Depends(get_current_user)):
     if not MIN_PRICE <= body.price <= MAX_PRICE:
         raise HTTPException(status_code=422, detail=f"Price must be between ${MIN_PRICE:.2f} and ${MAX_PRICE:.0f}.")
@@ -91,7 +94,7 @@ def submit_price(request: Request, body: PriceSubmission, user: CurrentUser = De
             "SELECT COUNT(*) AS n FROM price_observations WHERE submitted_by = ? AND created_at >= ?",
             (user.id, since),
         ).fetchone()["n"]
-        if recent >= MAX_DAILY_SUBMISSIONS:
+        if recent >= MAX_DAILY_SUBMISSIONS and not user.is_admin:
             raise HTTPException(status_code=429, detail="Daily price submission limit reached. Thanks for helping!")
 
         status = _review_status(conn, user, body.store_id, product_id, body.price)

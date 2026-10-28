@@ -120,3 +120,25 @@ describe("Legal pages", () => {
     expect(screen.getByRole("heading", { name: "Privacy Policy" })).toBeInTheDocument();
   });
 });
+
+describe("Admin deal parsing", () => {
+  it("parses pipe-separated deal lines and flags bad ones", async () => {
+    const { parseDeals } = await import("./AdminPage");
+    expect(parseDeals("Butter 454g | Dairy | 4.99 | 6.99\n\nEggs | Dairy | 3.49")).toEqual({
+      deals: [
+        { title: "Butter 454g", category: "Dairy", sale_price: 4.99, original_price: 6.99 },
+        { title: "Eggs", category: "Dairy", sale_price: 3.49 },
+      ],
+      badLine: null,
+    });
+    expect(parseDeals("Butter | Dairy | 4.99\nMilk | | 5").badLine).toBe(2);
+  });
+});
+
+describe("Admin page", () => {
+  it("is closed to people who aren't signed in as admins", async () => {
+    mockFetch(() => ({}));
+    renderAt("/admin");
+    expect(await screen.findByText("This page is for admins.")).toBeInTheDocument();
+  });
+});

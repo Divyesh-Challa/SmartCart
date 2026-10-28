@@ -76,6 +76,12 @@ function ProfilePanel() {
 
   return (
     <>
+      {profile.is_admin && (
+        <Card className="flex items-center justify-between gap-3">
+          <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-800">{t.admin.badge}</span>
+          <Link to="/admin" className="font-semibold text-brand-700 underline dark:text-brand-100">{t.admin.open}</Link>
+        </Card>
+      )}
       <Card>
         <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">{profile.email}</p>
         <form onSubmit={save} className="space-y-3">

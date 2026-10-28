@@ -154,4 +154,19 @@ export interface Profile {
   display_name: string | null;
   marketing_opt_in: boolean;
   price_reports: number;
+  plan: string;
+  is_admin: boolean;
+  has_full_access: boolean;
+}
+
+export interface PendingObservation {
+  id: number;
+  store_name: string;
+  product_name: string | null;
+  raw_item_name: string | null;
+  upc: string | null;
+  price: number;
+  observed_at: string;
+  current_median: number | null;
+  current_count: number | null;
 }

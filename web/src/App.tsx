@@ -9,6 +9,7 @@ import ScanPage from "./pages/ScanPage";
 import FlyersPage from "./pages/FlyersPage";
 import AccountPage from "./pages/AccountPage";
 import LegalPage from "./pages/LegalPage";
+import AdminPage from "./pages/AdminPage";
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="flyers" element={<FlyersPage />} />
         <Route path="account" element={<AccountPage />} />
         <Route path="legal/:doc" element={<LegalPage />} />
+        <Route path="admin" element={<AdminPage />} />
         <Route path="*" element={<HomePage />} />
       </Route>
     </Routes>

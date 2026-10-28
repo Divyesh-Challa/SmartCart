@@ -146,6 +146,37 @@ class TestAccount(ApiTestCase):
         self.assertEqual(len(self.client.get(f"/api/stores/{self.store_id}/prices").json()["prices"]), 1)
 
 
+class TestOwnerAdmin(ApiTestCase):
+    def test_allowlisted_email_becomes_admin_with_full_access(self):
+        me = self.client.get("/api/me", headers=auth_headers("owner-id", email="Owner@Example.com")).json()
+        self.assertTrue(me["is_admin"])
+        self.assertTrue(me["has_full_access"])
+        self.assertEqual(me["plan"], "admin")
+        # Admin endpoints work with the account alone, no admin token needed.
+        self.assertEqual(self.client.get("/api/admin/observations", headers=auth_headers("owner-id", email="owner@example.com")).status_code, 200)
+
+    def test_other_emails_are_regular_users(self):
+        me = self.client.get("/api/me", headers=auth_headers("someone", email="someone@example.com")).json()
+        self.assertFalse(me["is_admin"])
+        self.assertFalse(me["has_full_access"])
+        self.assertEqual(self.client.get("/api/admin/observations", headers=auth_headers("someone", email="someone@example.com")).status_code, 403)
+
+    def test_admin_reports_skip_review_and_rate_limit(self):
+        owner = auth_headers("owner-id", email="owner@example.com")
+        for i in range(3):
+            self.submit(auth_headers(f"regular-{i}"), price=5.49)
+        self.assertEqual(self.submit(owner, price=49.99).json()["status"], "accepted")
+
+        limiter.enabled = True
+        limiter.reset()
+        try:
+            codes = [self.submit(owner).status_code for _ in range(65)]
+        finally:
+            limiter.enabled = False
+            limiter.reset()
+        self.assertNotIn(429, codes)
+
+
 class TestAdminFlyers(ApiTestCase):
     def flyer(self, **overrides):
         body = {

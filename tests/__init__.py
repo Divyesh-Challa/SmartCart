@@ -13,6 +13,7 @@ os.environ["SMARTCART_DATABASE_URL"] = os.environ.get("SMARTCART_TEST_DATABASE_U
 os.environ["SMARTCART_SUPABASE_URL"] = ""
 os.environ["SMARTCART_SUPABASE_SERVICE_ROLE_KEY"] = ""
 os.environ["SMARTCART_SENTRY_DSN"] = ""
+os.environ["SMARTCART_ADMIN_EMAILS"] = '["owner@example.com"]'
 os.environ["SMARTCART_DB_PATH"] = (os.path.join(tempfile.mkdtemp(prefix="smartcart-test-"), "test.db"))
 # Tokens in tests are signed with this HS256 secret (see tests/auth_utils.py).
 os.environ["SMARTCART_SUPABASE_JWT_SECRET"] = "test-secret-that-is-at-least-32-bytes-long"

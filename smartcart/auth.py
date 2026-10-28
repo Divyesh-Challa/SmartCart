@@ -26,6 +26,12 @@ class CurrentUser:
     email: Optional[str]
     is_admin: bool = False
     trust_score: float = 0.5
+    plan: str = "free"
+
+    @property
+    def has_full_access(self) -> bool:
+        """Every feature, including any future paid ones. Paid-feature checks must use this."""
+        return self.is_admin or self.plan != "free"
 
 
 def auth_configured() -> bool:
@@ -68,12 +74,14 @@ def _upsert_user(user_id: str, email: Optional[str]) -> CurrentUser:
             ON CONFLICT(id) DO UPDATE SET email = COALESCE(excluded.email, users.email),
                                           last_seen_at = excluded.last_seen_at
         """, (user_id, email, now, now))
+        if email and email.lower() in {e.lower() for e in get_settings().admin_emails}:
+            conn.execute("UPDATE users SET is_admin = 1, plan = 'admin', trust_score = 1.0 WHERE id = ?", (user_id,))
         conn.commit()
-        row = conn.execute("SELECT id, email, is_admin, trust_score FROM users WHERE id = ?", (user_id,)).fetchone()
+        row = conn.execute("SELECT id, email, is_admin, trust_score, plan FROM users WHERE id = ?", (user_id,)).fetchone()
     finally:
         conn.close()
     return CurrentUser(id=row["id"], email=row["email"], is_admin=bool(row["is_admin"]),
-                       trust_score=float(row["trust_score"]))
+                       trust_score=float(row["trust_score"]), plan=row["plan"])
 
 
 def _bearer_token(authorization: Optional[str]) -> Optional[str]:
@@ -96,6 +104,7 @@ def get_optional_user(request: Request, authorization: Optional[str] = Header(No
                             headers={"WWW-Authenticate": "Bearer"}) from err
     user = _upsert_user(claims["sub"], claims.get("email"))
     request.state.user_id = user.id
+    request.state.is_admin = user.is_admin
     return user
 
 
