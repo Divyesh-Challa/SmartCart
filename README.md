@@ -1,18 +1,10 @@
-# SmartCart: Algorithmic Grocery Intelligence & Multi-Store Route Optimizer
+# SmartCart
 
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![SQLite](https://img.shields.io/badge/Database-SQLite3-003B57.svg?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
-[![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-v3.4-38B2AC.svg?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![Build & Tests](https://img.shields.io/badge/Tests-47%2F47%20Passing-brightgreen.svg)]()
-[![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
+Grocery price comparison and trip planning for the Edmonton area, built on prices that local shoppers report.
 
-> **Live Deployment:** [https://smartcart-9djq.onrender.com](https://smartcart-9djq.onrender.com)  
-> *Developed as a full-stack algorithmic systems project for Canadian consumers facing modern grocery inflation.*
+> **Status:** closed beta, Edmonton metro only. Not yet deployed from this branch. The roadmap is in [`docs/PROGRESS.md`](docs/PROGRESS.md), and the reasons behind the main choices are in [`docs/adr/`](docs/adr/).
 
----
-
-## 1. Problem Statement & Motivation
+## Why SmartCart
 
 Canadian grocery prices have experienced persistent inflation across core household staples (poultry, dairy, cooking oil, pantry staples). While households actively search for deals across competing supermarket chains—such as **No Frills, Real Canadian Superstore, Walmart, Sobeys, Metro, Save-On-Foods, and FreshCo**—manually comparing weekly circulars across multiple stores is tedious and inefficient.
 
@@ -24,73 +16,7 @@ Furthermore, naive price-chasing frequently leads to **negative net savings**: d
 3. Geocoded Haversine road travel distance matrices.
 4. Guaranteed inventory stock availability vs. multi-stop split trips.
 
----
-
-## 2. System Architecture
-
-```mermaid
-flowchart TD
-    subgraph Client["Frontend Desktop Client (SPA)"]
-        UI["Tailwind CSS + Responsive Interface"]
-        Drawer["Slide-Over Basket Drawer & Quick Add"]
-        ZXing["ZXing Real-Time Camera Barcode Engine"]
-        Storage["LocalStorage Cart & Meal Plan Persistence"]
-    end
-
-    subgraph API["FastAPI Application Server"]
-        Router["REST Endpoints (/api/*)"]
-        Parser["Natural Language Recipe Tokenizer"]
-        Normalizer["Unit Price Normalizer ($/100g, $/100ml)"]
-        Optimizer["Combinatorial 3-Plan Route Solver"]
-        Geo["Haversine Geocoding & Postal Resolver"]
-    end
-
-    subgraph StorageLayer["Data & Persistence Layer"]
-        DB[("SQLite Database: OSM Stores & Crowdsourced Price Observations")]
-        FlyerSvc["Admin-Entered Flyer Deals"]
-        GasSvc["Live Provincial Gas Price Benchmarks"]
-        OFF["Open Food Facts Canada API"]
-    end
-
-    UI --> Router
-    Drawer --> Router
-    ZXing --> Router
-    Router --> Parser
-    Router --> Normalizer
-    Router --> Optimizer
-    Router --> Geo
-    Optimizer --> DB
-    Optimizer --> GasSvc
-    Router --> FlyerSvc
-    Router --> OFF
-```
-
----
-
-## 3. Algorithmic Deep Dive: 3-Plan Route Optimizer
-
-The optimization engine solves for the most cost-effective shopping strategy given a user's location (Canadian postal code or coordinates), search radius $R$, and requested grocery list $B = \{i_1, i_2, \dots, i_m\}$.
-
-```
-Given:
-  S = {s_1, s_2, ..., s_k}  (Set of stores within radius R)
-  P(i, s)                   (Price of item i at store s)
-  D(s_a, s_b)               (Haversine travel distance between locations)
-  GasPrice                  (Provincial fuel rate in $/L)
-  FuelConsumptionRate       (8.9 L / 100 km standard city vehicle)
-```
-
-### The Three Generated Plans
-
-| Strategy | Algorithmic Formulation | Primary Benefit |
-| :--- | :--- | :--- |
-| **Plan 1: Maximum Net Saver** | Explores candidate store combinations of size $k \in \{1, 2, 3\}$. Solves exact shortest Hamiltonian path (TSP) for the store subset and computes fuel penalty: $\text{Fuel} = D \times \frac{8.9}{100} \times \text{GasPrice}$. Evaluates net out-of-pocket: $\min \left( \sum \min_{s} P(i, s) + \text{Fuel} \right)$. | Lowest overall out-of-pocket cost. |
-| **Plan 2: Single-Store Run** | Evaluates all single stores $s \in S$. Finds the single location that minimizes $\sum_{i \in B} P(i, s) + \text{Fuel}(2 \times D(\text{Home}, s))$. | Maximum convenience with 1 stop. |
-| **Plan 3: Full Basket Coverage** | Filters candidate stores to those with a recent reported price for every item in the basket. | 0% stockout risk. |
-
----
-
-## 4. Data Sources & Coverage (Edmonton Beta)
+## Where the data comes from
 
 SmartCart is in a **closed beta for the Edmonton metro area**. It never shows invented prices: when it has no recent price for an item, it says so.
 
@@ -104,140 +30,99 @@ SmartCart is in a **closed beta for the Edmonton metro area**. It never shows in
 
 To refresh store locations, run `python scripts/import_osm_stores.py`. To load prices you've collected, run `python scripts/import_prices.py prices.csv` (the column format is in the script).
 
-## 5. Key Engineering Features
+## How the trip optimizer works
 
-### 🛒 Slide-Over Basket Drawer & Quick Add
-- Dedicated right-hand drawer accessible from any section or the persistent navigation bar.
-- Real-time line-item quantity steppers, per-item deletion, and clear-cart safeguards.
-- Live mathematical summary tracking **Estimated Out-of-Pocket Cost**, **Regular Shelf Price**, and **Total Dollar / Percentage Savings**.
-- Direct 1-click jump to trigger the **3-Plan Combinatorial Route Optimizer**.
+The optimization engine solves for the most cost-effective shopping strategy given a user's location (Canadian postal code or coordinates), search radius $R$, and requested grocery list $B = \{i_1, i_2, \dots, i_m\}$.
 
-### 📱 Real-Time Barcode Scanner (ZXing + Open Food Facts)
-- Camera video frame decoding powered by `@zxing/library` with native `BarcodeDetector` fallback.
-- Eliminates simulated timers in favor of real frame-by-frame UPC/EAN barcode scanning.
-- Live fallback to the **Open Food Facts Canada API** to fetch macro nutrients (calories, protein, carbs, sodium, Nutri-Score) for real-world Canadian grocery packages.
-- Price benchmark comparisons across No Frills, Walmart, Superstore, Metro, and Sobeys.
-
-### 🍳 Flyer-to-Dinner Recipe Engine
-- Generates dinner meals built entirely from weekly flyer specials.
-- Computes exact cost-per-plate ($1.58 – $3.50/serving) and portion scaling.
-- Single-click **"Clip All Ingredients to Basket"** to populate the shopping list.
-
-### 📅 7-Day Deal-Based Meal Planner
-- Weekly planner cycle tailored to Canadian flyer cycles (Thursday reset through Wednesday final call).
-- Aggregates expected weekly meal spend and estimated grocery savings.
-
-### 🧾 Savings Progress Dashboard & Price Watchdog
-- Receipt logging dashboard with 30-day, 90-day, and 1-year historical analytics.
-- Price drop watchdog to monitor volatility on household essentials (butter, eggs, chicken breast, olive oil).
-
-### 🔄 Automated Store Data Refresh & Background Scheduler
-- **Asynchronous Background Worker:** Executes every 6 hours continuously in the background via `asyncio` in FastAPI.
-- **Price Cache Rebuild:** Recomputes each store's current prices from the last 30 days of accepted price observations.
-- **Fuel & Alerts:** Refreshes the gas price and checks price drop alerts against the rebuilt prices.
-- **Audit Logging:** Every sync cycle logs stores count, inventory updates, and timestamp metrics into SQLite `sync_history`.
-- **Manual Trigger:** Supports on-demand manual refresh via `POST /api/sync/refresh` and the interactive UI sync modal.
-
----
-
-## 6. Technology Stack
-
-- **Backend Framework:** FastAPI (Python 3.12)
-- **ASGI Server:** Uvicorn
-- **Data Modeling & Validation:** Pydantic v2
-- **Database:** SQLite 3 (WAL mode enabled, zero external database daemon required)
-- **Frontend:** Vanilla JavaScript (ES6+), HTML5, Tailwind CSS
-- **Barcode Engine:** ZXing (`@zxing/library`) + Native BarcodeDetector API
-- **External Data Integrations:** Open Food Facts Canada API, Natural Resources Canada / Provincial Gas Benchmarks
-
----
-
-## 7. Local Development Setup
-
-### Prerequisites
-- Python 3.10+ (tested on Python 3.12)
-- Git
-
-### 1. Clone Repository
-```bash
-git clone https://github.com/Divyesh-Challa/SmartCart.git
-cd SmartCart
+```
+Given:
+  S = {s_1, s_2, ..., s_k}  (Set of stores within radius R)
+  P(i, s)                   (Price of item i at store s)
+  D(s_a, s_b)               (Haversine travel distance between locations)
+  GasPrice                  (Provincial fuel rate in $/L)
+  FuelConsumptionRate       (9.5 L / 100 km typical vehicle)
 ```
 
-### 2. Create and Activate Virtual Environment
-```bash
-# On macOS / Linux:
-python3 -m venv venv
-source venv/bin/activate
+### The Three Generated Plans
 
-# On Windows:
-python -m venv venv
-venv\Scripts\activate
+| Strategy | Algorithmic Formulation | Primary Benefit |
+| :--- | :--- | :--- |
+| **Plan 1: Maximum Net Saver** | Explores candidate store combinations of size $k \in \{1, 2, 3\}$. Solves exact shortest Hamiltonian path (TSP) for the store subset and computes fuel penalty: $\text{Fuel} = D \times \frac{9.5}{100} \times \text{GasPrice}$. Evaluates net out-of-pocket: $\min \left( \sum \min_{s} P(i, s) + \text{Fuel} \right)$. | Lowest overall out-of-pocket cost. |
+| **Plan 2: Single-Store Run** | Evaluates all single stores $s \in S$. Finds the single location that minimizes $\sum_{i \in B} P(i, s) + \text{Fuel}(2 \times D(\text{Home}, s))$. | Maximum convenience with 1 stop. |
+| **Plan 3: Full Basket Coverage** | Filters candidate stores to those with a recent reported price for every item in the basket. | 0% stockout risk. |
+
+## Architecture
+
+```mermaid
+flowchart LR
+    PWA["web/ React PWA<br/>(Cloudflare Pages)"] -->|HTTPS + Supabase JWT| API["FastAPI API<br/>smartcart/"]
+    PWA -->|magic-link sign-in| Auth["Supabase Auth"]
+    API -->|verify JWT via JWKS| Auth
+    API --> DB[("Postgres (Supabase)<br/>SQLite locally")]
+    Worker["smartcart.worker<br/>price cache + gas + alerts"] --> DB
+    API --> OFF["Open Food Facts"]
+    Import["scripts/import_osm_stores.py"] -->|OpenStreetMap| Data["smartcart/data/*.json"]
 ```
 
-### 3. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
+| Area | Where |
+| :--- | :--- |
+| API app, legacy endpoints | `smartcart/main.py` |
+| Prices, accounts, personal data, admin | `smartcart/routers/` |
+| Auth (Supabase JWT) | `smartcart/auth.py` |
+| DB connection layer, price aggregation | `smartcart/database.py` |
+| Schema migrations | `smartcart/migrations/` (Alembic) |
+| Settings | `smartcart/config.py`, `.env.example` |
+| Optimizer, parser, unit normalizer | `smartcart/optimizer.py`, `parser.py`, `normalizer.py` |
+| PWA | `web/` |
+| Test-only synthetic data | `tests/fixtures/` |
 
-### 4. Run Development Server
-```bash
-uvicorn smartcart.main:app --reload --port 8000
-```
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your web browser.  
-Interactive OpenAPI/Swagger documentation is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+## Local development
 
----
-
-## 8. Automated Testing
-
-The project includes a comprehensive automated test suite testing unit conversions, recipe token parsing, geocoding distances, and route optimization logic:
+Requirements: Python 3.12, Node 22+, and Docker (optional, for Postgres tests).
 
 ```bash
-# Run all unit tests
-python3 -m unittest discover -s . -p "test_*.py" -t . -v
+# API
+python3.12 -m venv venv
+venv/bin/pip install -r requirements-dev.txt
+cp .env.example .env              # every setting is optional locally
+venv/bin/python -m uvicorn smartcart.main:app --reload --port 8000
+# Creates/migrates smartcart.db and loads the Edmonton stores on startup.
+
+# PWA (second terminal)
+cd web
+npm install
+cp .env.example .env.local        # add Supabase keys to enable accounts
+npm run dev                       # http://localhost:5173, proxies /api to :8000
 ```
 
-**Test Coverage Highlights:**
-- `test_parse_ingredients_regex`: Natural language ingredient and quantity tokenizer.
-- `test_normalize_units`: Metric and imperial unit conversions ($/100g, $/100ml, $/kg, $/lb).
-- `test_haversine_distance`: Geodesic coordinate calculation accuracy.
-- `test_3_plan_optimizer`: Multi-store split, single-store, and gas penalty evaluation.
-- `test_barcode_lookup`: Seeded barcode lookup and external API schema compliance.
-- `test_gas_price_endpoint`: Provincial fuel price resolver.
+Useful commands:
 
----
-
-## 9. Project Directory Structure
-
-```
-SmartCart/
-├── smartcart/
-│   ├── main.py              # FastAPI app, API routing, Open Food Facts integration
-│   ├── database.py          # SQLite schema, OSM store loader, price observation aggregation
-│   ├── scheduler.py         # Automated background sync worker & weekly flyer scheduler
-│   ├── optimizer.py         # 3-Plan combinatorial route optimizer & fuel math
-│   ├── parser.py            # Natural language recipe parser and ingredient tokenization
-│   ├── normalizer.py        # Unit price normalizer ($/100g, $/100ml, $/kg)
-│   ├── geocoding.py         # Haversine distance matrix & Canadian postal code resolver
-│   ├── flyers_service.py    # Multi-banner circular scraper & deal caching service
-│   ├── gas_service.py       # Provincial gasoline price index ($/L)
-│   └── static/
-│       ├── index.html       # Desktop terminal SPA with slide-over drawer & ZXing scanner
-│       └── manifest.json    # Web app manifest
-├── tests/
-│   ├── test_smartcart.py    # API + optimizer tests (synthetic fixture data)
-│   ├── test_real_data.py    # Real-data pipeline tests
-│   └── fixtures/            # Synthetic test-only data (never loaded in the app)
-├── Dockerfile               # Container deployment configuration
-├── Procfile                 # Production web process definition
-├── render.yaml              # Render cloud infrastructure blueprint
-├── requirements.txt         # Pinned Python package dependencies
-└── README.md                # Technical portfolio documentation
+```bash
+venv/bin/python -m smartcart.database --purge-unsourced   # one-time: remove prototype demo data
+venv/bin/python scripts/import_osm_stores.py              # refresh store locations from OpenStreetMap
+venv/bin/python scripts/import_prices.py prices.csv       # load prices you collected (format in the script)
+venv/bin/alembic revision -m "describe change"            # new migration (edit it by hand)
 ```
 
----
+## Tests
 
-## 10. License
+```bash
+venv/bin/ruff check .
+venv/bin/python -m pytest -q                              # SQLite
+docker run -d --name smartcart-pg-test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=smartcart_test -p 55432:5432 postgres:17-alpine
+SMARTCART_DATABASE_URL=postgresql://postgres:test@localhost:55432/smartcart_test venv/bin/python -m pytest -q
+cd web && npm test && npm run build
+```
 
-This project is licensed under the [MIT License](LICENSE).
+CI (`.github/workflows/ci.yml`) runs lint, the API tests on both databases, the Docker build, and the web tests and build.
+
+## Deployment
+
+- **API:** `Dockerfile` (non-root, `/healthz` health check). `render.yaml` defines the web service and worker with auto-deploy off; secrets are set in the dashboard. In production set `SMARTCART_RUN_SCHEDULER=false` on the web service and run `python -m smartcart.worker` separately, or use `python -m smartcart.scheduler_once` from a cron job.
+- **PWA:** `cd web && npm run build`, then host `web/dist` as a static site with SPA fallback. Set `VITE_API_URL`, `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` at build time, and add the site's origin to `SMARTCART_CORS_ORIGINS`.
+
+## Legal
+
+Draft privacy policy, terms and pricing explainer are in `web/src/legal/`. They need legal review before launch; see [`docs/legal/README.md`](docs/legal/README.md).
+
+Store locations © OpenStreetMap contributors (ODbL). Product data from Open Food Facts (ODbL).
