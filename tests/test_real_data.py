@@ -7,14 +7,12 @@ database-backed flyers, and the interim admin guard on flyer uploads.
 import base64
 import datetime
 import json
-import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("SMARTCART_DB_PATH", os.path.join(tempfile.mkdtemp(prefix="smartcart-test-"), "test.db"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi.testclient import TestClient
@@ -22,6 +20,8 @@ from fastapi.testclient import TestClient
 import smartcart.database as database
 from smartcart import flyers_service
 from smartcart.main import app
+from tests.auth_utils import auth_headers
+from tests.db_utils import reset_database
 
 
 class RealDataTestCase(unittest.TestCase):
@@ -31,7 +31,7 @@ class RealDataTestCase(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory(prefix="smartcart-real-")
         self._patch = mock.patch.object(database, "DB_PATH", Path(self._tmp.name) / "real.db")
         self._patch.start()
-        database.init_db()
+        reset_database()
         self.conn = database.get_connection()
         database.seed_product_catalog(self.conn)
 
@@ -188,6 +188,53 @@ class TestDatabaseFlyers(RealDataTestCase):
         self.assertEqual(flyers_service.search_flyer_items("eggs"), [])
 
 
+class TestBarcodeLookup(RealDataTestCase):
+    OFF_PRODUCT = {
+        "barcode": "0055000000001", "name": "Test Oats", "brand": "Test Brand", "package_size": "1 kg",
+        "category": "Cereals", "image_url": None, "calories": 379, "protein_g": 13.0, "carbs_g": 68.0,
+        "fat_g": 6.5, "fiber_g": None, "sodium_mg": None, "nutri_score": "A", "ingredients_text": "Oats",
+        "source": "openfoodfacts",
+    }
+
+    def setUp(self):
+        super().setUp()
+        database.load_real_stores(self.conn, "edmonton")
+        self.client = TestClient(app)
+
+    def test_unpriced_item_reports_no_prices_and_keeps_missing_nutrition_missing(self):
+        with mock.patch("smartcart.main.fetch_open_food_facts", return_value=dict(self.OFF_PRODUCT)) as off:
+            data = self.client.get("/api/barcode/lookup?barcode=0055000000001").json()
+        off.assert_called_once()
+        self.assertTrue(data["found"])
+        self.assertFalse(data["has_prices"])
+        self.assertEqual(data["store_prices"], [])
+        self.assertIsNone(data["best_price"])
+        self.assertIsNone(data["nutrition"]["fiber_g"])
+        self.assertEqual(data["nutrition"]["calories"], 379)
+
+    def test_observed_upc_prices_are_returned_with_provenance(self):
+        store_id = self.first_store_id()
+        for price in (3.49, 3.99):
+            database.record_price_observation(self.conn, store_id, price, "receipt", upc="0055000000001")
+        with mock.patch("smartcart.main.fetch_open_food_facts", return_value=dict(self.OFF_PRODUCT)):
+            data = self.client.get("/api/barcode/lookup?barcode=0055000000001").json()
+        self.assertTrue(data["has_prices"])
+        self.assertEqual(len(data["store_prices"]), 1)
+        self.assertAlmostEqual(data["store_prices"][0]["price"], 3.74)
+        self.assertEqual(data["store_prices"][0]["observation_count"], 2)
+
+    def test_second_lookup_uses_cache(self):
+        with mock.patch("smartcart.main.fetch_open_food_facts", return_value=dict(self.OFF_PRODUCT)) as off:
+            self.client.get("/api/barcode/lookup?barcode=0055000000001")
+            self.client.get("/api/barcode/lookup?barcode=0055000000001")
+        self.assertEqual(off.call_count, 1)
+
+    def test_unknown_barcode(self):
+        with mock.patch("smartcart.main.fetch_open_food_facts", return_value=None):
+            data = self.client.get("/api/barcode/lookup?barcode=0055000000002").json()
+        self.assertFalse(data["found"])
+
+
 class TestFlyerUploadGuard(RealDataTestCase):
     PNG = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 32).decode()
 
@@ -203,27 +250,23 @@ class TestFlyerUploadGuard(RealDataTestCase):
 
     def test_upload_requires_admin_token(self):
         body = {"banner": "Test Banner", "page_number": 1, "image_base64": self.PNG}
-        with mock.patch.dict(os.environ, {"SMARTCART_ADMIN_TOKEN": "s3cret"}):
-            self.assertEqual(self.client.post("/api/flyers/upload", json=body).status_code, 403)
-            bad = self.client.post("/api/flyers/upload", json=body, headers={"X-Admin-Token": "nope"})
-            self.assertEqual(bad.status_code, 403)
-            ok = self.client.post("/api/flyers/upload", json=body, headers={"X-Admin-Token": "s3cret"})
-            self.assertEqual(ok.status_code, 200, ok.text)
-            self.assertTrue(ok.json()["image_url"].endswith(".png"))
+        self.assertEqual(self.client.post("/api/flyers/upload", json=body).status_code, 403)
+        bad = self.client.post("/api/flyers/upload", json=body, headers={"X-Admin-Token": "nope"})
+        self.assertEqual(bad.status_code, 403)
+        ok = self.client.post("/api/flyers/upload", json=body, headers={"X-Admin-Token": "test-admin-token"})
+        self.assertEqual(ok.status_code, 200, ok.text)
+        self.assertTrue(ok.json()["image_url"].endswith(".png"))
 
-    def test_upload_disabled_when_no_token_configured(self):
+    def test_regular_users_cannot_upload(self):
         body = {"banner": "Test Banner", "page_number": 1, "image_base64": self.PNG}
-        with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("SMARTCART_ADMIN_TOKEN", None)
-            res = self.client.post("/api/flyers/upload", json=body, headers={"X-Admin-Token": ""})
-            self.assertEqual(res.status_code, 403)
+        res = self.client.post("/api/flyers/upload", json=body, headers=auth_headers("regular-user"))
+        self.assertEqual(res.status_code, 403)
 
     def test_upload_rejects_non_images(self):
         body = {"banner": "Test Banner", "page_number": 1,
                 "image_base64": base64.b64encode(b"<script>alert(1)</script>").decode()}
-        with mock.patch.dict(os.environ, {"SMARTCART_ADMIN_TOKEN": "s3cret"}):
-            res = self.client.post("/api/flyers/upload", json=body, headers={"X-Admin-Token": "s3cret"})
-            self.assertEqual(res.status_code, 415)
+        res = self.client.post("/api/flyers/upload", json=body, headers={"X-Admin-Token": "test-admin-token"})
+        self.assertEqual(res.status_code, 415)
 
 
 if __name__ == "__main__":

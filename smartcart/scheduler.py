@@ -6,40 +6,17 @@ provincial gas prices, and evaluates price drop alerts.
 
 import asyncio
 import datetime
-import sqlite3
+import logging
 import time
 from typing import Dict, Any
 
 from smartcart.database import get_connection, refresh_inventory_from_observations
 from smartcart.gas_service import fetch_live_edmonton_gas_price
 
+log = logging.getLogger(__name__)
+
 # Default background sync interval: 6 hours (21,600 seconds)
 DEFAULT_SYNC_INTERVAL_SECONDS = 6 * 3600
-
-def init_sync_tables(conn: sqlite3.Connection):
-    cursor = conn.cursor()
-    cursor.executescript("""
-    CREATE TABLE IF NOT EXISTS sync_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        synced_at TEXT NOT NULL,
-        stores_count INTEGER NOT NULL,
-        inventory_rows_count INTEGER NOT NULL,
-        flyer_deals_count INTEGER NOT NULL,
-        gas_price_ab REAL NOT NULL,
-        gas_price_bc REAL NOT NULL,
-        flyer_cycle_label TEXT NOT NULL,
-        status TEXT NOT NULL,
-        details TEXT,
-        next_sync_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS sync_meta (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    """)
-    conn.commit()
 
 def get_current_flyer_cycle() -> Dict[str, Any]:
     """
@@ -49,12 +26,12 @@ def get_current_flyer_cycle() -> Dict[str, Any]:
     now = datetime.datetime.now()
     # weekday(): Monday=0, Tuesday=1, Wednesday=2, Thursday=3, Friday=4, Saturday=5, Sunday=6
     day_of_week = now.weekday()
-    
+
     # Calculate days since most recent Thursday (weekday 3)
     days_since_thursday = (day_of_week - 3) % 7
     cycle_start = now - datetime.timedelta(days=days_since_thursday)
     cycle_end = cycle_start + datetime.timedelta(days=6)
-    
+
     days_remaining = (cycle_end.date() - now.date()).days
     if days_remaining < 0:
         days_remaining = 0
@@ -68,7 +45,7 @@ def get_current_flyer_cycle() -> Dict[str, Any]:
         "is_reset_day": day_of_week == 3
     }
 
-def evaluate_price_alerts(conn: sqlite3.Connection):
+def evaluate_price_alerts(conn):
     """
     Evaluates active price alerts against current product prices.
     """
@@ -81,7 +58,7 @@ def evaluate_price_alerts(conn: sqlite3.Connection):
             target = a["target_price"]
             # Find lowest price for this product
             cursor.execute("""
-                SELECT MIN(si.price) as min_price 
+                SELECT MIN(si.price) as min_price
                 FROM store_inventory si
                 JOIN products p ON si.product_id = p.id
                 WHERE LOWER(p.name) LIKE ?
@@ -91,13 +68,13 @@ def evaluate_price_alerts(conn: sqlite3.Connection):
                 min_price = res["min_price"]
                 is_on_sale = 1 if min_price <= target else 0
                 cursor.execute("""
-                    UPDATE sale_alerts 
-                    SET current_sale_price = ?, is_on_sale = ? 
+                    UPDATE sale_alerts
+                    SET current_sale_price = ?, is_on_sale = ?
                     WHERE id = ?
                 """, (min_price, is_on_sale, a["id"]))
         conn.commit()
     except Exception as e:
-        print(f"Price alert evaluation notice: {e}")
+        log.warning("Price alert evaluation failed: %s", e)
 
 def perform_data_sync() -> Dict[str, Any]:
     """
@@ -109,7 +86,6 @@ def perform_data_sync() -> Dict[str, Any]:
     """
     start_time = time.time()
     conn = get_connection()
-    init_sync_tables(conn)
     cursor = conn.cursor()
 
     # 1. Total stores count
@@ -160,12 +136,14 @@ def perform_data_sync() -> Dict[str, Any]:
     ))
 
     cursor.execute("""
-        INSERT OR REPLACE INTO sync_meta (key, value, updated_at)
+        INSERT INTO sync_meta (key, value, updated_at)
         VALUES ('last_sync', ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
     """, (now_str,))
     cursor.execute("""
-        INSERT OR REPLACE INTO sync_meta (key, value, updated_at)
+        INSERT INTO sync_meta (key, value, updated_at)
         VALUES ('next_sync', ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
     """, (next_sync_str,))
 
     conn.commit()
@@ -193,7 +171,6 @@ def get_sync_status() -> Dict[str, Any]:
     Returns current sync status and metadata from SQLite.
     """
     conn = get_connection()
-    init_sync_tables(conn)
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -238,13 +215,12 @@ async def background_sync_worker(interval_seconds: int = DEFAULT_SYNC_INTERVAL_S
     Perpetual background async task running within the FastAPI event loop.
     Ensures Canadian grocery data is regularly updated every 6 hours and on flyer reset.
     """
-    print(f"[SmartCart Scheduler] Background store data sync worker initialized (Interval: {interval_seconds}s)")
+    log.info("Background sync worker started (interval %ss)", interval_seconds)
     while True:
         try:
-            print("[SmartCart Scheduler] Executing scheduled Canadian grocery data sync...")
             result = perform_data_sync()
-            print(f"[SmartCart Scheduler] Sync completed successfully: {result['stores_count']} stores, {result['inventory_prices_rebuilt']} prices rebuilt")
+            log.info("Sync completed: %s stores, %s prices rebuilt", result['stores_count'], result['inventory_prices_rebuilt'])
         except Exception as e:
-            print(f"[SmartCart Scheduler] Sync error during scheduled run: {e}")
-        
+            log.exception("Scheduled sync failed: %s", e)
+
         await asyncio.sleep(interval_seconds)

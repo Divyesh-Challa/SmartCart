@@ -107,14 +107,14 @@ def resolve_location_to_postal_code(query: str) -> str:
     Defaults to Edmonton (T5K2X4).
     """
     clean_q = str(query).strip().lower()
-    
+
     # Check if direct postal code
     cleaned_pc = clean_postal_code(clean_q)
     if len(cleaned_pc) == 6 or (len(cleaned_pc) == 3 and cleaned_pc[0] in "ABCEGHJKLMNPRSTVXY"):
         return cleaned_pc
 
     # Check city names across Alberta, BC, and Canada Wide
-    for reg_name, reg_data in SUPPORTED_REGIONS.items():
+    for reg_data in SUPPORTED_REGIONS.values():
         for c in reg_data["cities"]:
             if c["city"].lower() in clean_q or clean_q in c["city"].lower():
                 return clean_postal_code(c["postal_code"])
@@ -126,7 +126,7 @@ def resolve_location_to_postal_code(query: str) -> str:
 def get_city_for_postal_code(postal_code_or_city: str) -> Dict[str, Any]:
     """Finds matching city and province info for given postal code or city name."""
     query_str = str(postal_code_or_city).strip().lower()
-    
+
     # First check direct city names across supported regions
     for reg_name, reg_data in SUPPORTED_REGIONS.items():
         for c in reg_data["cities"]:

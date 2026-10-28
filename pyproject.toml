@@ -1,0 +1,26 @@
+[project]
+name = "smartcart"
+version = "0.2.0"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 140
+target-version = "py312"
+extend-exclude = ["venv", "web", "smartcart/migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "S"]
+ignore = [
+    "E501",   # long SQL strings are fine
+    "S101",   # asserts in tests
+    "S608",   # SQL built from fixed fragments with bound parameters
+    "B008",   # FastAPI Depends()/Query() defaults
+    "S311",   # random is only used in test fixtures
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S108"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning:starlette.*"]

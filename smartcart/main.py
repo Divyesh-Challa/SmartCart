@@ -5,19 +5,30 @@ full multi-page weekly digital flyers, custom flyer uploads, and 3-mode basket o
 Serves the SmartCart Web Companion interface.
 """
 
-from fastapi import FastAPI, HTTPException, Query, Header
+from contextlib import asynccontextmanager
+
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from pathlib import Path
-import os
-import base64
-import re
 import asyncio
+import datetime
+import logging
+import re
+import statistics
 
-from smartcart.database import bootstrap_database, get_connection, haversine_distance_km
-from smartcart.parser import parse_recipe_text, parse_ingredient_line
+import httpx
+
+from smartcart.database import (
+    PRICE_OBSERVATION_WINDOW_DAYS,
+    bootstrap_database,
+    get_connection,
+    haversine_distance_km,
+)
+from smartcart.parser import parse_recipe_text
 from smartcart.normalizer import match_product_in_catalog, get_product_prices_across_stores, normalize_barcode
 from smartcart.optimizer import BasketOptimizer, DEFAULT_USER_LAT, DEFAULT_USER_LON
 from smartcart.geocoding import resolve_postal_code
@@ -32,25 +43,72 @@ from smartcart.flyers_service import (
 from smartcart.scheduler import (
     background_sync_worker,
     perform_data_sync,
-    get_sync_status,
-    get_current_flyer_cycle
+    get_sync_status
 )
 from smartcart.meal_generator import generate_flyer_grounded_meal_plan
+from smartcart.auth import CurrentUser, get_optional_user, require_admin_user
+from smartcart.config import get_settings
+from smartcart.observability import configure_observability
+from smartcart.routers import account, admin, personal, prices
+from smartcart.security import MaxBodySizeMiddleware, SecurityHeadersMiddleware, limiter
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
+log = logging.getLogger("smartcart")
+settings = get_settings()
+configure_observability(settings)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    log.info("Database ready: %s", bootstrap_database())
+    worker = None
+    if settings.run_scheduler:
+        try:
+            perform_data_sync()
+        except Exception:
+            log.exception("Initial sync failed")
+        worker = asyncio.create_task(background_sync_worker())
+    yield
+    if worker is not None:
+        worker.cancel()
+
 
 app = FastAPI(
     title="SmartCart API",
-    description="AI-powered smart grocery intelligence, weekly digital flyers & multi-store basket optimizer",
-    version="1.4.0"
+    description="Grocery price comparison and multi-store trip planning for Edmonton, built on prices shared by shoppers.",
+    version="0.2.0",
+    lifespan=lifespan,
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(MaxBodySizeMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "X-Admin-Token"],
+)
+app.include_router(prices.router)
+app.include_router(personal.router)
+app.include_router(account.router)
+app.include_router(admin.router)
 
-@app.on_event("startup")
-async def startup_event():
-    print(f"[SmartCart] Database ready: {bootstrap_database()}")
+
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    conn = get_connection()
     try:
-        perform_data_sync()
-    except Exception as e:
-        print(f"[SmartCart] Initial sync notice: {e}")
-    asyncio.create_task(background_sync_worker())
+        conn.execute("SELECT 1").fetchone()
+    finally:
+        conn.close()
+    return {"status": "ok"}
 
 class ParseRecipeRequest(BaseModel):
     recipe_text: Optional[str] = Field(None, description="Unstructured recipe or natural language grocery list text")
@@ -78,42 +136,11 @@ class GeocodeRequest(BaseModel):
 class ComparisonRequest(BaseModel):
     items: List[BasketItemRequest]
 
-def require_admin(x_admin_token: Optional[str]) -> None:
-    """Interim guard for content-management endpoints until user accounts land."""
-    expected = os.environ.get("SMARTCART_ADMIN_TOKEN")
-    if not expected or x_admin_token != expected:
-        raise HTTPException(status_code=403, detail="Admin access required.")
-
-MAX_FLYER_IMAGE_BYTES = 5 * 1024 * 1024
-PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
-JPEG_MAGIC = b"\xff\xd8\xff"
-
-class UploadFlyerRequest(BaseModel):
-    banner: str = Field(..., description="Supermarket chain (e.g. No Frills, Walmart, Superstore)")
-    page_number: int = Field(1, description="Page number 1 through 6")
-    image_base64: str = Field(..., description="Base64 or Data URL of the flyer page image")
-    title: Optional[str] = Field(None, description="Optional title for the flyer page")
-
-
 class RecipeRequestModel(BaseModel):
     dish_name: str = Field(..., description="Recipe or ingredient requested")
     cuisine_preference: Optional[str] = Field(None, description="Cuisine or dietary goal")
     dietary_notes: Optional[str] = Field(None, description="Additional notes")
     user_email: Optional[str] = Field(None, description="User email")
-
-class ReceiptCreateModel(BaseModel):
-    store_name: str = Field(..., description="Grocery chain or store name")
-    trip_date: str = Field(..., description="YYYY-MM-DD format date")
-    amount_spent: float = Field(..., description="Actual paid amount in CAD")
-    regular_amount: float = Field(..., description="Regular shelf price amount in CAD")
-    category: Optional[str] = Field("Groceries", description="Primary shopping category")
-    items_count: Optional[int] = Field(0, description="Number of items purchased")
-    notes: Optional[str] = Field("", description="Trip notes or purchased items summary")
-
-class AlertCreateModel(BaseModel):
-    product_name: str = Field(..., description="Product to watch for flyer sales")
-    category: Optional[str] = Field("Pantry", description="Department/category")
-    target_price: Optional[float] = Field(None, description="Target notification price in CAD")
 
 @app.get("/api/recipes/dinner-deals")
 def get_dinner_deals(
@@ -308,13 +335,14 @@ def generate_meal_plan_endpoint(req: MealPlanRequestModel):
     )
 
 @app.post("/api/recipes/request")
-def submit_recipe_request(req: RecipeRequestModel):
+def submit_recipe_request(req: RecipeRequestModel, user: Optional[CurrentUser] = Depends(get_optional_user)):
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
-        INSERT INTO recipe_requests (dish_name, cuisine_preference, dietary_notes, user_email)
-        VALUES (?, ?, ?, ?)
-    """, (req.dish_name, req.cuisine_preference, req.dietary_notes, req.user_email))
+        INSERT INTO recipe_requests (user_id, dish_name, cuisine_preference, dietary_notes, user_email)
+        VALUES (?, ?, ?, ?, ?)
+    """, (user.id if user else None, req.dish_name, req.cuisine_preference, req.dietary_notes,
+          req.user_email or (user.email if user else None)))
     conn.commit()
     conn.close()
     return {"status": "ok", "message": "Recipe request submitted successfully!"}
@@ -332,8 +360,9 @@ def get_coverage_stats():
         WHERE province IS NOT NULL GROUP BY province ORDER BY count DESC
     """).fetchall()
     priced_stores = c.execute("SELECT COUNT(DISTINCT store_id) AS n FROM store_inventory").fetchone()["n"]
+    cutoff = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)).isoformat(timespec="seconds")
     observations_30d = c.execute(
-        "SELECT COUNT(*) AS n FROM price_observations WHERE observed_at >= datetime('now', '-30 days')"
+        "SELECT COUNT(*) AS n FROM price_observations WHERE observed_at >= ?", (cutoff,)
     ).fetchone()["n"]
     recipes = c.execute("SELECT COUNT(*) AS n FROM flyer_recipes").fetchone()["n"]
     conn.close()
@@ -351,243 +380,164 @@ def get_coverage_stats():
         "attribution": "Store locations © OpenStreetMap contributors (ODbL)",
     }
 
+OPEN_FOOD_FACTS_URL = "https://world.openfoodfacts.org/api/v2/product/{code}.json"
+OPEN_FOOD_FACTS_FIELDS = "product_name,product_name_en,brands,quantity,image_front_url,nutriscore_grade,nutriments,ingredients_text,ingredients_text_en,categories"
+
+def _optional_float(value) -> Optional[float]:
+    try:
+        return round(float(value), 2) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+def fetch_open_food_facts(code: str) -> Optional[Dict[str, Any]]:
+    """Product details from Open Food Facts (ODbL). Missing fields stay None."""
+    try:
+        resp = httpx.get(
+            OPEN_FOOD_FACTS_URL.format(code=code),
+            params={"fields": OPEN_FOOD_FACTS_FIELDS},
+            headers={"User-Agent": "SmartCart/0.2 (grocery price comparison; contact via app)"},
+            timeout=4.0,
+        )
+        data = resp.json() if resp.status_code == 200 else {}
+    except (httpx.HTTPError, ValueError):
+        return None
+    prod = data.get("product") if data.get("status") in (1, "product found") else None
+    if not prod:
+        return None
+    nutriments = prod.get("nutriments", {})
+    sodium_g = _optional_float(nutriments.get("sodium_100g"))
+    calories = _optional_float(nutriments.get("energy-kcal_100g"))
+    return {
+        "barcode": code,
+        "name": prod.get("product_name") or prod.get("product_name_en") or None,
+        "brand": prod.get("brands") or None,
+        "package_size": prod.get("quantity") or None,
+        "category": (prod.get("categories") or "").split(",")[0].strip() or None,
+        "image_url": prod.get("image_front_url") or None,
+        "calories": int(calories) if calories is not None else None,
+        "protein_g": _optional_float(nutriments.get("proteins_100g")),
+        "carbs_g": _optional_float(nutriments.get("carbohydrates_100g")),
+        "fat_g": _optional_float(nutriments.get("fat_100g")),
+        "fiber_g": _optional_float(nutriments.get("fiber_100g")),
+        "sodium_mg": round(sodium_g * 1000, 1) if sodium_g is not None else None,
+        "nutri_score": (prod.get("nutriscore_grade") or "").upper() or None,
+        "ingredients_text": prod.get("ingredients_text") or prod.get("ingredients_text_en") or None,
+        "source": "openfoodfacts",
+    }
+
+def _cache_product_info(conn, info: Dict[str, Any]) -> None:
+    conn.execute("""
+        INSERT INTO barcode_products (
+            barcode, name, brand, package_size, category, image_url, calories, protein_g,
+            carbs_g, fat_g, fiber_g, sodium_mg, nutri_score, ingredients_text, source, fetched_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(barcode) DO UPDATE SET
+            name = excluded.name, brand = excluded.brand, package_size = excluded.package_size,
+            category = excluded.category, image_url = excluded.image_url, calories = excluded.calories,
+            protein_g = excluded.protein_g, carbs_g = excluded.carbs_g, fat_g = excluded.fat_g,
+            fiber_g = excluded.fiber_g, sodium_mg = excluded.sodium_mg, nutri_score = excluded.nutri_score,
+            ingredients_text = excluded.ingredients_text, source = excluded.source, fetched_at = excluded.fetched_at
+    """, (
+        info["barcode"], info["name"] or f"Item {info['barcode']}", info["brand"], info["package_size"],
+        info["category"], info["image_url"], info["calories"], info["protein_g"], info["carbs_g"],
+        info["fat_g"], info["fiber_g"], info["sodium_mg"], info["nutri_score"], info["ingredients_text"],
+        info["source"], datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+    ))
+    conn.commit()
+
+def observed_prices_for_barcode(conn, code: str, product_name: Optional[str]) -> List[Dict[str, Any]]:
+    """
+    Recent reported prices for a scanned item, one entry per store: from
+    observations recorded against this UPC, plus the price cache for the
+    matching catalog product when the name matches one.
+    """
+    cutoff = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=PRICE_OBSERVATION_WINDOW_DAYS)).isoformat(timespec="seconds")
+    rows = conn.execute("""
+        SELECT o.store_id, s.name AS store_name, s.banner, o.price, o.observed_at, o.is_sale
+        FROM price_observations o JOIN stores s ON s.id = o.store_id
+        WHERE o.upc IN (?, ?) AND o.status = 'accepted' AND o.observed_at >= ?
+    """, (code, "0" + code if len(code) == 12 else code, cutoff)).fetchall()
+    by_store: Dict[int, List[Dict[str, Any]]] = {}
+    for r in rows:
+        by_store.setdefault(r["store_id"], []).append(dict(r))
+
+    prices = []
+    for store_id, obs in by_store.items():
+        latest = max(obs, key=lambda o: o["observed_at"])
+        prices.append({
+            "store_id": store_id,
+            "store_name": latest["store_name"],
+            "banner": latest["banner"],
+            "price": round(statistics.median(o["price"] for o in obs), 2),
+            "is_sale": bool(latest["is_sale"]),
+            "observation_count": len(obs),
+            "last_observed_at": latest["observed_at"],
+        })
+
+    matched = match_product_in_catalog(product_name) if product_name else None
+    if matched:
+        seen = {p["store_id"] for p in prices}
+        for r in conn.execute("""
+            SELECT si.store_id, s.name AS store_name, s.banner, si.price, si.observation_count, si.last_observed_at
+            FROM store_inventory si JOIN stores s ON s.id = si.store_id
+            WHERE si.product_id = ?
+        """, (matched["id"],)).fetchall():
+            if r["store_id"] not in seen:
+                prices.append({**dict(r), "is_sale": False})
+
+    prices.sort(key=lambda p: p["price"])
+    for i, p in enumerate(prices):
+        p["is_lowest"] = i == 0
+    return prices
+
 def resolve_barcode_item(barcode: str) -> Dict[str, Any]:
     code_clean = normalize_barcode(barcode)
     if not code_clean:
         raise HTTPException(status_code=400, detail="Invalid barcode format.")
 
     conn = get_connection()
-    c = conn.cursor()
-    # Check both code_clean and 0-padded variant
-    c.execute("SELECT * FROM barcode_products WHERE barcode = ? OR barcode = ?", (code_clean, "0" + code_clean if len(code_clean) == 12 else code_clean))
-    row = c.fetchone()
-
-    if row:
-        p = dict(row)
-        # Option B: Pull real store prices from inventory matching the product name
-        c.execute("""
-            SELECT si.price, s.name as store_name, s.banner
-            FROM store_inventory si
-            JOIN stores s ON s.id = si.store_id
-            JOIN products pr ON pr.id = si.product_id
-            WHERE LOWER(pr.name) LIKE ?
-        """, (f"%{p['name'].lower()[:15]}%",))
-        real_inv = [dict(r) for r in c.fetchall()]
-
-        store_prices = []
-        seen_banners = set()
-        for inv in real_inv:
-            b = inv["banner"]
-            if b not in seen_banners:
-                seen_banners.add(b)
-                store_prices.append({
-                    "banner": b,
-                    "store_name": inv["store_name"],
-                    "price": inv["price"],
-                    "is_sale": False,
-                    "is_lowest": False
-                })
-
-        primary_banner = p["banner"] or "No Frills"
-        if primary_banner not in seen_banners:
-            store_prices.append({
-                "banner": primary_banner,
-                "store_name": f"{primary_banner} Supermarket",
-                "price": p["sale_price"],
-                "is_sale": bool(p["is_on_sale"]),
-                "is_lowest": False
-            })
-        else:
-            for sp in store_prices:
-                if sp["banner"] == primary_banner and p["sale_price"] < sp["price"]:
-                    sp["price"] = p["sale_price"]
-                    sp["is_sale"] = bool(p["is_on_sale"])
-
-        if not store_prices:
-            store_prices = [{
-                "banner": primary_banner,
-                "store_name": f"{primary_banner} Supermarket",
-                "price": p["sale_price"],
-                "is_sale": bool(p["is_on_sale"]),
-                "is_lowest": True
-            }]
-
-        store_prices.sort(key=lambda x: x["price"])
-        min_p = store_prices[0]["price"]
-        for sp in store_prices:
-            sp["is_lowest"] = (sp["price"] == min_p)
-
-        conn.close()
-        reg_p = p["regular_price"] or round(p["sale_price"] * 1.25, 2)
-        sale_p = p["sale_price"]
-        return {
-            "found": True,
-            "barcode": code_clean,
-            "name": p["name"],
-            "brand": p["brand"] or "Canadian Grocer",
-            "package_size": p["package_size"] or "1 unit",
-            "category": p["category"] or "Grocery",
-            "sale_price": sale_p,
-            "regular_price": reg_p,
-            "savings": round(reg_p - sale_p, 2),
-            "savings_percent": round((reg_p - sale_p) / reg_p * 100) if reg_p else 0,
-            "banner": p["banner"] or "No Frills",
-            "best_store": store_prices[0]["banner"],
-            "best_price": store_prices[0]["price"],
-            "is_on_sale": bool(p["is_on_sale"]),
-            "image_url": p["image_url"] or "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop",
-            "nutrition": {
-                "calories": p["calories"] or 150,
-                "protein_g": p["protein_g"] or 4.0,
-                "carbs_g": p["carbs_g"] or 20.0,
-                "fat_g": p["fat_g"] or 3.0,
-                "fiber_g": p["fiber_g"] or 2.0,
-                "sodium_mg": p["sodium_mg"] or 100.0,
-                "nutri_score": p["nutri_score"] or "B",
-                "ingredients": p["ingredients_text"] or "Natural Canadian ingredients."
-            },
-            "store_prices": store_prices
-        }
-
-    # 2. Real-Time Open Food Facts Canada API v2 Lookup (with v0 fallback)
     try:
-        import urllib.request, json, ssl
-        ssl_ctx = ssl._create_unverified_context()
-        off_url = f"https://world.openfoodfacts.org/api/v2/product/{code_clean}.json"
-        req = urllib.request.Request(
-            off_url,
-            headers={"User-Agent": "SmartCart-Canada - Version 2.1 - https://smartcart-9djq.onrender.com"}
-        )
-        with urllib.request.urlopen(req, context=ssl_ctx, timeout=3.5) as resp:
-            off_data = json.loads(resp.read().decode("utf-8"))
-            if off_data.get("status") in [1, "product found"] and off_data.get("product"):
-                prod = off_data["product"]
-                prod_name = prod.get("product_name") or prod.get("product_name_en") or f"Canadian Grocery Item ({code_clean})"
-                brand = prod.get("brands") or "Canadian Grocer"
-                pkg = prod.get("quantity") or "1 unit"
-                img = prod.get("image_front_url") or prod.get("image_url") or "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop"
-                nutri = (prod.get("nutriscore_grade") or "b").upper()
-                nutriments = prod.get("nutriments", {})
-                cals = int(nutriments.get("energy-kcal_100g") or nutriments.get("energy-kcal") or 150)
-                prot = float(nutriments.get("proteins_100g") or nutriments.get("proteins") or 4.0)
-                carbs = float(nutriments.get("carbohydrates_100g") or nutriments.get("carbohydrates") or 20.0)
-                fat = float(nutriments.get("fat_100g") or nutriments.get("fat") or 3.0)
-                fib = float(nutriments.get("fiber_100g") or nutriments.get("fiber") or 2.0)
-                sod = round(float(nutriments.get("sodium_100g") or 0.1) * 1000, 1)
-                ingred = prod.get("ingredients_text") or prod.get("ingredients_text_en") or "Ingredients listed on Canadian package."
+        candidates = (code_clean, "0" + code_clean if len(code_clean) == 12 else code_clean)
+        row = conn.execute("SELECT * FROM barcode_products WHERE barcode = ? OR barcode = ?", candidates).fetchone()
+        info = dict(row) if row else fetch_open_food_facts(code_clean)
+        if info is None:
+            return {
+                "found": False,
+                "barcode": code_clean,
+                "message": f"We couldn't find barcode {code_clean}. You can still add its price from your receipt.",
+            }
+        if row is None:
+            _cache_product_info(conn, info)
 
-                base_val = 3.99 + (abs(hash(code_clean)) % 30) * 0.1
-                sale_p = round(base_val * 0.82, 2)
-                reg_p = round(base_val * 1.18, 2)
-
-                store_prices = [
-                    {"banner": "Canadian Retail Index", "store_name": "Canadian Retail Index", "price": sale_p, "is_sale": False, "is_lowest": True}
-                ]
-
-                try:
-                    c.execute("""
-                        INSERT OR REPLACE INTO barcode_products (
-                            barcode, name, brand, package_size, category, sale_price, regular_price,
-                            banner, is_on_sale, calories, protein_g, carbs_g, fat_g, fiber_g, sodium_mg,
-                            nutri_score, ingredients_text, image_url
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        code_clean, prod_name, brand, pkg, "Grocery", sale_p, reg_p,
-                        "No Frills", 1, cals, prot, carbs, fat, fib, sod, nutri, ingred, img
-                    ))
-                    conn.commit()
-                except Exception:
-                    pass
-
-                conn.close()
-                return {
-                    "found": True,
-                    "barcode": code_clean,
-                    "name": prod_name,
-                    "brand": brand,
-                    "package_size": pkg,
-                    "category": "Grocery",
-                    "sale_price": sale_p,
-                    "regular_price": reg_p,
-                    "savings": round(reg_p - sale_p, 2),
-                    "savings_percent": round((reg_p - sale_p) / reg_p * 100),
-                    "banner": "No Frills",
-                    "best_store": store_prices[0]["banner"],
-                    "best_price": store_prices[0]["price"],
-                    "is_on_sale": True,
-                    "image_url": img,
-                    "nutrition": {
-                        "calories": cals,
-                        "protein_g": prot,
-                        "carbs_g": carbs,
-                        "fat_g": fat,
-                        "fiber_g": fib,
-                        "sodium_mg": sod,
-                        "nutri_score": nutri,
-                        "ingredients": ingred
-                    },
-                    "store_prices": store_prices
-                }
-    except Exception:
-        pass
-
-    # 3. Catalog fallback
-    c.execute("SELECT * FROM products WHERE name LIKE ? OR aliases LIKE ? LIMIT 1", (f"%{code_clean}%", f"%{code_clean}%"))
-    prod_row = c.fetchone()
-    if prod_row:
-        pr = dict(prod_row)
-        sale_p = 3.99
-        reg_p = 5.49
-        store_prices = [
-            {"banner": "No Frills", "price": 3.99, "is_sale": True, "is_lowest": True},
-            {"banner": "Walmart", "price": 4.47, "is_sale": False, "is_lowest": False},
-            {"banner": "Superstore", "price": 4.29, "is_sale": False, "is_lowest": False}
-        ]
-        res = {
-            "found": True,
-            "barcode": code_clean,
-            "name": pr["name"],
-            "brand": pr["brand"] or "Canadian Grocer",
-            "package_size": f"{pr['package_quantity']} {pr['package_unit']}",
-            "category": pr["category"] or "Grocery",
-            "sale_price": sale_p,
-            "regular_price": reg_p,
-            "savings": round(reg_p - sale_p, 2),
-            "savings_percent": round((reg_p - sale_p) / reg_p * 100),
-            "banner": "No Frills",
-            "best_store": "No Frills",
-            "best_price": sale_p,
-            "is_on_sale": True,
-            "image_url": "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop",
-            "nutrition": {
-                "calories": 140, "protein_g": 4.0, "carbs_g": 18.0, "fat_g": 2.0, "fiber_g": 2.0, "sodium_mg": 90.0,
-                "nutri_score": "B", "ingredients": "Natural Canadian grocery ingredients."
-            },
-            "store_prices": store_prices
-        }
-        try:
-            c.execute("""
-                INSERT OR REPLACE INTO barcode_products (
-                    barcode, name, brand, package_size, category, sale_price, regular_price,
-                    banner, is_on_sale, calories, protein_g, carbs_g, fat_g, fiber_g, sodium_mg,
-                    nutri_score, ingredients_text, image_url
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                code_clean, pr["name"], pr["brand"] or "Canadian Grocer", f"{pr['package_quantity']} {pr['package_unit']}",
-                pr["category"] or "Grocery", sale_p, reg_p, "No Frills", 1, 140, 4.0, 18.0, 2.0, 2.0, 90.0,
-                "B", "Natural Canadian grocery ingredients.", res["image_url"]
-            ))
-            conn.commit()
-        except Exception:
-            pass
+        store_prices = observed_prices_for_barcode(conn, code_clean, info.get("name"))
+    finally:
         conn.close()
-        return res
 
-    conn.close()
+    best = store_prices[0] if store_prices else None
     return {
-        "found": False,
+        "found": True,
         "barcode": code_clean,
-        "message": f"Barcode {code_clean} not found in Canadian circular index. Try scanning one of the demo samples!"
+        "name": info.get("name"),
+        "brand": info.get("brand"),
+        "package_size": info.get("package_size"),
+        "category": info.get("category"),
+        "image_url": info.get("image_url"),
+        "best_store": best["banner"] if best else None,
+        "best_price": best["price"] if best else None,
+        "has_prices": bool(store_prices),
+        "nutrition": {
+            "calories": info.get("calories"),
+            "protein_g": info.get("protein_g"),
+            "carbs_g": info.get("carbs_g"),
+            "fat_g": info.get("fat_g"),
+            "fiber_g": info.get("fiber_g"),
+            "sodium_mg": info.get("sodium_mg"),
+            "nutri_score": info.get("nutri_score"),
+            "ingredients": info.get("ingredients_text"),
+            "per": "100g",
+        },
+        "store_prices": store_prices,
+        "attribution": "Product data from Open Food Facts (ODbL)" if info.get("source") == "openfoodfacts" else None,
     }
 
 @app.get("/api/v1/barcodes/resolve/{barcode}")
@@ -604,137 +554,10 @@ def barcode_lookup(barcode: str = Query(..., description="UPC or EAN barcode num
 def get_sample_barcodes():
     conn = get_connection()
     c = conn.cursor()
-    c.execute("SELECT barcode, name, brand, package_size, sale_price, regular_price, banner, is_on_sale FROM barcode_products LIMIT 12")
+    c.execute("SELECT barcode, name, brand, package_size, image_url FROM barcode_products ORDER BY fetched_at DESC LIMIT 12")
     samples = [dict(r) for r in c.fetchall()]
     conn.close()
     return {"samples": samples}
-
-@app.get("/api/savings/summary")
-def get_savings_summary():
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("""
-        SELECT 
-            COUNT(*) as trips_count,
-            COALESCE(SUM(amount_spent), 0) as total_spent,
-            COALESCE(SUM(regular_amount), 0) as total_regular,
-            COALESCE(SUM(amount_saved), 0) as total_saved
-        FROM receipts
-    """)
-    row = c.fetchone()
-    trips_count = row["trips_count"]
-    total_spent = round(row["total_spent"], 2)
-    total_regular = round(row["total_regular"], 2)
-    total_saved = round(row["total_saved"], 2)
-    savings_percent = round((total_saved / total_regular * 100), 1) if total_regular > 0 else 0.0
-
-    c.execute("""
-        SELECT category, SUM(amount_saved) as saved, SUM(amount_spent) as spent
-        FROM receipts
-        GROUP BY category
-        ORDER BY saved DESC
-    """)
-    categories = []
-    for r in c.fetchall():
-        cat_saved = round(r["saved"], 2)
-        cat_spent = round(r["spent"], 2)
-        categories.append({
-            "category": r["category"],
-            "saved": cat_saved,
-            "spent": cat_spent,
-            "share_percent": round(cat_saved / total_saved * 100, 1) if total_saved > 0 else 0
-        })
-    conn.close()
-    return {
-        "trips_count": trips_count,
-        "total_spent": total_spent,
-        "total_regular": total_regular,
-        "total_saved": total_saved,
-        "savings_percent": savings_percent,
-        "avg_savings_per_trip": round(total_saved / trips_count, 2) if trips_count > 0 else 0.0,
-        "categories": categories
-    }
-
-@app.get("/api/savings/receipts")
-def get_savings_receipts():
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM receipts ORDER BY trip_date DESC, id DESC")
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
-    return {"receipts": rows}
-
-@app.post("/api/savings/receipts")
-def create_receipt(receipt: ReceiptCreateModel):
-    spent = round(receipt.amount_spent, 2)
-    regular = round(receipt.regular_amount, 2)
-    saved = round(max(0.0, regular - spent), 2)
-    pct = round((saved / regular * 100)) if regular > 0 else 0
-    
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("""
-        INSERT INTO receipts (store_name, trip_date, amount_spent, regular_amount, amount_saved, savings_percent, items_count, category, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (receipt.store_name, receipt.trip_date, spent, regular, saved, pct, receipt.items_count, receipt.category or "Groceries", receipt.notes or ""))
-    conn.commit()
-    new_id = c.lastrowid
-    conn.close()
-    return {"status": "ok", "id": new_id, "amount_saved": saved, "savings_percent": pct}
-
-@app.delete("/api/savings/receipts/{receipt_id}")
-def delete_receipt(receipt_id: int):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("DELETE FROM receipts WHERE id = ?", (receipt_id,))
-    conn.commit()
-    conn.close()
-    return {"status": "ok", "deleted": True}
-
-@app.get("/api/alerts")
-def get_alerts():
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM sale_alerts ORDER BY is_on_sale DESC, id DESC")
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
-    return {"alerts": rows}
-
-@app.post("/api/alerts")
-def create_alert(alert: AlertCreateModel):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("""
-        SELECT d.sale_price, d.original_price, f.banner
-        FROM flyer_deals d
-        JOIN flyers f ON f.id = d.flyer_id
-        WHERE LOWER(d.title) LIKE ?
-        ORDER BY d.sale_price ASC LIMIT 1
-    """, (f"%{alert.product_name.lower().strip()}%",))
-    deal_row = c.fetchone()
-    
-    is_on_sale = 1 if deal_row else 0
-    curr_price = deal_row["sale_price"] if deal_row else None
-    reg_price = deal_row["original_price"] if deal_row else None
-    banner = deal_row["banner"] if deal_row else "Any Store"
-
-    c.execute("""
-        INSERT INTO sale_alerts (product_name, category, target_price, current_sale_price, regular_price, banner, is_on_sale)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (alert.product_name, alert.category or "Pantry", alert.target_price, curr_price, reg_price, banner, is_on_sale))
-    conn.commit()
-    alert_id = c.lastrowid
-    conn.close()
-    return {"status": "ok", "id": alert_id, "is_on_sale": bool(is_on_sale)}
-
-@app.delete("/api/alerts/{alert_id}")
-def delete_alert(alert_id: int):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("DELETE FROM sale_alerts WHERE id = ?", (alert_id,))
-    conn.commit()
-    conn.close()
-    return {"status": "ok", "deleted": True}
 
 @app.get("/api/deals/top-ticker")
 def get_top_deals_ticker():
@@ -902,21 +725,21 @@ def get_stores(
 
     conn = get_connection()
     cursor = conn.cursor()
-    
+
     query = "SELECT id, name, banner, address, city, postal_code, quadrant, latitude, longitude, requires_membership FROM stores"
     conditions = []
     params = []
-    
+
     if quadrant:
         conditions.append("quadrant = ?")
         params.append(quadrant)
     if city and city.lower() != "all":
         conditions.append("LOWER(city) LIKE ?")
         params.append(f"%{city.lower()}%")
-        
+
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
-        
+
     cursor.execute(query, params)
     stores = [dict(row) for row in cursor.fetchall()]
     conn.close()
@@ -977,11 +800,10 @@ def get_catalog_flyer_deals(
            f.banner, f.valid_from, f.valid_to,
            COALESCE(d.store_name, f.banner) as store_name,
            COALESCE(d.item_name, d.title) as item_name,
-           COALESCE(d.unit_size, printf('%g %s', p.package_quantity, p.package_unit), '1 unit') as unit_size,
+           d.unit_size,
            COALESCE(d.valid_until, f.valid_to) as valid_until,
            p.name as matched_product_name, p.package_quantity, p.package_unit,
            p.standard_unit_type as std_type,
-           printf('%g %s', p.package_quantity, p.package_unit) as package_size,
            COALESCE(d.original_price, d.sale_price) as price
     FROM flyer_deals d
     JOIN flyers f ON f.id = d.flyer_id
@@ -1009,6 +831,10 @@ def get_catalog_flyer_deals(
     cursor.execute(query, params)
     deals = [dict(row) for row in cursor.fetchall()]
     conn.close()
+    for d in deals:
+        pkg = f"{d['package_quantity']:g} {d['package_unit']}" if d["package_quantity"] is not None else None
+        d["package_size"] = pkg
+        d["unit_size"] = d["unit_size"] or pkg or "1 unit"
     return {"count": len(deals), "deals": deals}
 
 @app.get("/api/flyers/search")
@@ -1044,67 +870,6 @@ def get_custom_flyer_pages():
     pages = [dict(r) for r in c.fetchall()]
     conn.close()
     return {"custom_pages": pages}
-
-@app.post("/api/flyers/upload")
-def upload_custom_flyer_page(req: UploadFlyerRequest, x_admin_token: Optional[str] = Header(None)):
-    require_admin(x_admin_token)
-    if not 1 <= req.page_number <= 50:
-        raise HTTPException(status_code=400, detail="page_number must be between 1 and 50.")
-
-    raw_b64 = req.image_base64
-    if "," in raw_b64:
-        raw_b64 = raw_b64.split(",", 1)[1]
-    if len(raw_b64) > MAX_FLYER_IMAGE_BYTES * 4 // 3 + 4:
-        raise HTTPException(status_code=413, detail="Image exceeds 5 MB limit.")
-
-    try:
-        img_bytes = base64.b64decode(raw_b64, validate=True)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Image is not valid base64.")
-    if img_bytes.startswith(PNG_MAGIC):
-        ext = "png"
-    elif img_bytes.startswith(JPEG_MAGIC):
-        ext = "jpg"
-    else:
-        raise HTTPException(status_code=415, detail="Only PNG and JPEG images are accepted.")
-
-    banner_clean = re.sub(r'[^a-zA-Z0-9]', '_', req.banner).lower()
-    filename = f"{banner_clean}_p{req.page_number}.{ext}"
-    upload_dir = Path(__file__).parent / "static" / "uploads" / "flyers"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    (upload_dir / filename).write_bytes(img_bytes)
-
-    image_url = f"/static/uploads/flyers/{filename}"
-
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("""
-        INSERT INTO custom_flyer_pages (banner, page_number, image_url, title)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(banner, page_number) DO UPDATE SET
-            image_url = excluded.image_url,
-            title = excluded.title,
-            created_at = CURRENT_TIMESTAMP
-    """, (req.banner, req.page_number, image_url, req.title or f"{req.banner} Page {req.page_number}"))
-    conn.commit()
-    conn.close()
-
-    return {
-        "status": "ok",
-        "banner": req.banner,
-        "page_number": req.page_number,
-        "image_url": image_url
-    }
-
-@app.delete("/api/flyers/custom-page")
-def delete_custom_flyer_page(banner: str = Query(...), page_number: int = Query(...), x_admin_token: Optional[str] = Header(None)):
-    require_admin(x_admin_token)
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("DELETE FROM custom_flyer_pages WHERE LOWER(banner) = LOWER(?) AND page_number = ?", (banner, page_number))
-    conn.commit()
-    conn.close()
-    return {"status": "ok", "deleted": True}
 
 @app.get("/api/gas-price")
 def get_gas_price_endpoint():
@@ -1164,7 +929,7 @@ def optimize_basket(req: OptimizeBasketRequest):
     origin_query = f"{target_lat},{target_lon}"
 
     # Normalize plan structures to support all frontend conventions
-    for plan_key, plan in result.get("plans", {}).items():
+    for plan in result.get("plans", {}).values():
         if not plan:
             continue
         plan["total_cost"] = plan.get("all_in_cost", 0.0)
@@ -1506,11 +1271,8 @@ def sync_status_endpoint():
     return get_sync_status()
 
 @app.post("/api/sync/refresh")
-def sync_refresh_endpoint():
-    """
-    Triggers an on-demand update of stores, weekly flyer promotions,
-    inventory prices, and live provincial fuel benchmarks.
-    """
+def sync_refresh_endpoint(admin_user: Optional[CurrentUser] = Depends(require_admin_user)):
+    """Admin: rebuild store prices from observations and refresh fuel prices now."""
     return perform_data_sync()
 
 @app.get("/api/sync/history")

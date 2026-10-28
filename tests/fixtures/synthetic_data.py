@@ -8,7 +8,6 @@ deterministic dataset. It must never be loaded into a database users can see.
 """
 
 import datetime
-import json
 from typing import List
 
 from smartcart.database import (
@@ -38,11 +37,12 @@ def seed_dealdish_tables(conn):
             ("055000123789", "Folgers Classic Roast Ground Coffee (960g)", "Folgers", "960g", "Pantry", 9.99, 15.99, "Safeway", 1, 2, 0.3, 0.0, 0.0, 0.0, 5.0, "A", "100% Pure Mountain Grown Arabica and Robusta Coffee.", "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=400&auto=format&fit=crop")
         ]
         cursor.executemany("""
-            INSERT OR REPLACE INTO barcode_products (
+            INSERT INTO barcode_products (
                 barcode, name, brand, package_size, category, sale_price, regular_price,
                 banner, is_on_sale, calories, protein_g, carbs_g, fat_g, fiber_g, sodium_mg,
                 nutri_score, ingredients_text, image_url
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(barcode) DO NOTHING
         """, barcode_seeds)
 
     # 2. Savings Receipts
@@ -86,7 +86,7 @@ def seed_dealdish_tables(conn):
 
     cursor.execute("SELECT id FROM products")
     valid_prod_ids = {r["id"] for r in cursor.fetchall()}
-    
+
     if "Metro" not in existing_banners:
         cursor.execute("""
             INSERT INTO flyers (banner, title, total_pages, valid_from, valid_to, badge_text, color_theme)
@@ -256,7 +256,7 @@ def generate_canadian_store_network() -> List[tuple]:
     store_idx = 1
     rng = random.Random(42)
 
-    for prov_code, prov_name, prov_target, city_list in PROVINCES_DISTRIBUTION:
+    for prov_code, _prov_name, _prov_target, city_list in PROVINCES_DISTRIBUTION:
         banner_pool = BANNERS_BY_REGION.get(prov_code, ['Supermarket', 'Walmart', 'No Frills'])
         for city_name, city_target, base_lat, base_lon, fsa, quads in city_list:
             for i in range(city_target):
@@ -301,7 +301,7 @@ def seed_synthetic_data(force: bool = False):
     cursor.execute("DELETE FROM price_observations")
     cursor.execute("DELETE FROM store_inventory")
     cursor.execute("DELETE FROM stores")
-    
+
     stores = generate_canadian_store_network()
     cursor.executemany("""
     INSERT INTO stores (name, banner, address, city, postal_code, quadrant, latitude, longitude, requires_membership)
@@ -575,16 +575,19 @@ def seed_synthetic_data(force: bool = False):
         WHERE valid_until IS NULL
     """)
     cursor.execute("""
-        UPDATE flyer_deals
-        SET unit_size = (SELECT printf('%g %s', p.package_quantity, p.package_unit) FROM products p WHERE p.id = flyer_deals.product_id)
-        WHERE (unit_size IS NULL OR unit_size = '') AND product_id IS NOT NULL
+        SELECT d.id, p.package_quantity, p.package_unit FROM flyer_deals d
+        JOIN products p ON p.id = d.product_id
+        WHERE d.unit_size IS NULL OR d.unit_size = ''
     """)
+    for r in cursor.fetchall():
+        cursor.execute("UPDATE flyer_deals SET unit_size = ? WHERE id = ?",
+                       (f"{r['package_quantity']:g} {r['package_unit']}", r["id"]))
     cursor.execute("SELECT id, title FROM flyer_deals WHERE unit_size IS NULL OR unit_size = ''")
     for r in cursor.fetchall():
         u_size = extract_unit_size(r["title"])
         cursor.execute("UPDATE flyer_deals SET unit_size = ? WHERE id = ?", (u_size, r["id"]))
 
-    
+
     # 5. Seed Flyer-To-Dinner Recipes
     cursor.execute("SELECT COUNT(*) as count FROM flyer_recipes")
     if cursor.fetchone()["count"] == 0:

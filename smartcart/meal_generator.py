@@ -232,7 +232,7 @@ def generate_flyer_grounded_meal_plan(
     """
     day_list = days or ["Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday", "Wednesday"]
     deals = fetch_active_flyer_deals_for_recipes(preferred_stores)
-    
+
     # Filter blueprints if dietary preference is set
     blueprints = list(RECIPE_BLUEPRINTS)
     if dietary_preference and dietary_preference.lower() != "all":
@@ -248,7 +248,7 @@ def generate_flyer_grounded_meal_plan(
 
     for i, day in enumerate(day_list):
         bp = blueprints[i % len(blueprints)]
-        
+
         # Pick high-discount deals relevant to the blueprint
         annotated_ingredients = []
         recipe_sale_total = 0.0

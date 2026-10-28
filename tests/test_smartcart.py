@@ -4,35 +4,29 @@ Covers database seeding, recipe parsing, unit price normalization,
 postal code geocoding, Edmonton-wide stores, and interactive weekly digital circulars.
 """
 
-import os
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
-# Tests run against a throwaway database seeded with synthetic data; never the
-# real smartcart.db. This must be set before any smartcart module is imported.
-os.environ["SMARTCART_DB_PATH"] = os.path.join(tempfile.mkdtemp(prefix="smartcart-test-"), "test.db")
 
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from smartcart.database import init_db, get_connection, haversine_distance_km
+from tests.auth_utils import auth_headers
+from tests.db_utils import reset_database
 from tests.fixtures.synthetic_data import seed_synthetic_data as seed_edmonton_data
 from smartcart.parser import parse_ingredient_line, parse_recipe_text
 from smartcart.normalizer import (
     normalize_quantity_to_standard,
-    match_product_in_catalog,
-    compute_packages_needed,
-    get_product_prices_across_stores
+    match_product_in_catalog
 )
 from smartcart.geocoding import resolve_postal_code
-from smartcart.optimizer import BasketOptimizer
 from fastapi.testclient import TestClient
 from smartcart.main import app
 
 def setUpModule():
-    init_db()
+    reset_database()
     seed_edmonton_data()
 
 class TestSmartCartDatabase(unittest.TestCase):
@@ -205,21 +199,34 @@ class TestFlyersAndDeals(unittest.TestCase):
         self.assertIn("store_prices", data)
 
     def test_savings_summary_and_receipts(self):
-        res_sum = self.client.get("/api/savings/summary")
-        self.assertEqual(res_sum.status_code, 200)
-        summary = res_sum.json()
-        self.assertGreater(summary["total_saved"], 0)
-        self.assertGreater(summary["trips_count"], 0)
+        alice = auth_headers("user-alice")
+        bob = auth_headers("user-bob")
+        self.assertEqual(self.client.get("/api/savings/summary").status_code, 401)
 
-        res_receipts = self.client.get("/api/savings/receipts")
-        self.assertEqual(res_receipts.status_code, 200)
-        self.assertGreaterEqual(len(res_receipts.json()["receipts"]), 1)
+        created = self.client.post("/api/savings/receipts", headers=alice, json={
+            "store_name": "No Frills", "trip_date": "2026-10-20", "amount_spent": 42.85, "regular_amount": 68.40,
+        })
+        self.assertEqual(created.status_code, 200, created.text)
+
+        summary = self.client.get("/api/savings/summary", headers=alice).json()
+        self.assertEqual(summary["trips_count"], 1)
+        self.assertAlmostEqual(summary["total_saved"], 25.55)
+        self.assertEqual(len(self.client.get("/api/savings/receipts", headers=alice).json()["receipts"]), 1)
+
+        # Another user sees none of it and cannot delete it.
+        self.assertEqual(self.client.get("/api/savings/receipts", headers=bob).json()["receipts"], [])
+        rid = created.json()["id"]
+        self.assertEqual(self.client.delete(f"/api/savings/receipts/{rid}", headers=bob).status_code, 404)
+        self.assertEqual(self.client.delete(f"/api/savings/receipts/{rid}", headers=alice).status_code, 200)
 
     def test_sale_alerts(self):
-        res_alerts = self.client.get("/api/alerts")
-        self.assertEqual(res_alerts.status_code, 200)
-        alerts = res_alerts.json()["alerts"]
-        self.assertGreaterEqual(len(alerts), 1)
+        alice = auth_headers("user-alice-alerts")
+        self.assertEqual(self.client.get("/api/alerts").status_code, 401)
+        res = self.client.post("/api/alerts", headers=alice, json={"product_name": "butter", "target_price": 4.5})
+        self.assertEqual(res.status_code, 200, res.text)
+        alerts = self.client.get("/api/alerts", headers=alice).json()["alerts"]
+        self.assertEqual(len(alerts), 1)
+        self.assertEqual(self.client.get("/api/alerts", headers=auth_headers("someone-else")).json()["alerts"], [])
 
     def test_regional_coverage_and_flyers(self):
         res_reg = self.client.get("/api/coverage/regions")
@@ -248,7 +255,8 @@ class TestFlyersAndDeals(unittest.TestCase):
         self.assertIn("flyer_cycle", data)
         self.assertIn("gas_prices", data)
 
-        res_refresh = self.client.post("/api/sync/refresh")
+        self.assertEqual(self.client.post("/api/sync/refresh").status_code, 403)
+        res_refresh = self.client.post("/api/sync/refresh", headers={"X-Admin-Token": "test-admin-token"})
         self.assertEqual(res_refresh.status_code, 200)
         ref_data = res_refresh.json()
         self.assertEqual(ref_data["status"], "SUCCESS")
@@ -273,11 +281,11 @@ class TestSmartCartEnhancementsTDD(unittest.TestCase):
         self.assertEqual(normalize_barcode("8001234567890"), "8001234567890")
 
     def test_flyer_deals_structured_columns(self):
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("PRAGMA table_info(flyer_deals)")
-        columns = {row["name"] for row in c.fetchall()}
-        conn.close()
+        import sqlalchemy as sa
+        from smartcart.database import sqlalchemy_url
+        engine = sa.create_engine(sqlalchemy_url())
+        columns = {col["name"] for col in sa.inspect(engine).get_columns("flyer_deals")}
+        engine.dispose()
         required_cols = {"store_name", "title", "sale_price", "unit_size", "valid_until", "category"}
         self.assertTrue(required_cols.issubset(columns), f"Missing columns in flyer_deals: {required_cols - columns}")
 
@@ -303,14 +311,14 @@ class TestSmartCartEnhancementsTDD(unittest.TestCase):
         self.assertIn("data", body)
         recipes = body["data"]
         self.assertGreaterEqual(len(recipes), 1)
-        
+
         recipe = recipes[0]
         self.assertIn("title", recipe)
         self.assertIn("total_sale_cost", recipe)
         self.assertIn("total_regular_cost", recipe)
         self.assertIn("total_savings", recipe)
         self.assertIn("ingredients", recipe)
-        
+
         # At least one ingredient must be annotated as on sale with store metadata
         has_sale_ing = any(ing.get("is_on_sale") and ing.get("store_name") for ing in recipe["ingredients"])
         self.assertTrue(has_sale_ing, "Recipe must annotate ingredients on sale with store_name")
@@ -327,7 +335,7 @@ class TestSmartCartEnhancementsTDD(unittest.TestCase):
         self.assertIn("name", first_group)
         self.assertIn("stores", first_group)
         self.assertGreaterEqual(len(first_group["stores"]), 1)
-        
+
         first_store = first_group["stores"][0]
         self.assertIn("store_name", first_store)
         self.assertIn("banner", first_store)
@@ -385,7 +393,7 @@ class TestSmartCartEnhancementsTDD(unittest.TestCase):
         self.assertIn("data", data_edm)
         self.assertIn("location", data_edm)
         self.assertEqual(data_edm["location"]["postal_code"], "T5K 2X4")
-        
+
         # All stores in Edmonton search must be within 25 km and have distance_km
         for prod in data_edm["data"]:
             for st in prod["stores"]:

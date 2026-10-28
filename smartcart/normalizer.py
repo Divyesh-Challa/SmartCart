@@ -6,21 +6,10 @@ and matches natural language ingredient queries to catalog SKUs.
 
 import math
 import re
+import time
 from typing import Dict, Any, List, Optional, Tuple
+from smartcart.barcodes import normalize_barcode  # noqa: F401  (re-exported)
 from smartcart.database import get_connection, haversine_distance_km
-
-def normalize_barcode(raw_code: str) -> str:
-    """
-    Cleans raw scanned barcode input, removes non-alphanumeric chars (spaces, hyphens),
-    and strips leading zero if 13-digit EAN-13 begins with '0' (UPC-A padded format).
-    """
-    if not raw_code:
-        return ""
-    clean = re.sub(r'[^a-zA-Z0-9]', '', str(raw_code).strip())
-    if len(clean) == 13 and clean.startswith('0') and clean.isdigit():
-        return clean[1:]
-    return clean
-
 
 WEIGHT_TO_GRAMS = {
     "g": 1.0,
@@ -67,8 +56,6 @@ def normalize_quantity_to_standard(quantity: float, unit: str) -> Tuple[str, flo
 
     multiplier = UNIT_MULTIPLIERS.get(unit_lower, 1.0)
     return "unit", quantity * multiplier
-
-import time
 
 _PRODUCT_CATALOG_CACHE: Optional[List[Dict[str, Any]]] = None
 _CACHE_TIMESTAMP: float = 0.0
