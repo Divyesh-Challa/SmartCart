@@ -91,9 +91,9 @@ def get_optional_user(request: Request, authorization: Optional[str] = Header(No
         raise HTTPException(status_code=503, detail="Accounts are not available yet.")
     try:
         claims = decode_access_token(token)
-    except jwt.PyJWTError:
+    except jwt.PyJWTError as err:
         raise HTTPException(status_code=401, detail="Invalid or expired session. Please sign in again.",
-                            headers={"WWW-Authenticate": "Bearer"})
+                            headers={"WWW-Authenticate": "Bearer"}) from err
     user = _upsert_user(claims["sub"], claims.get("email"))
     request.state.user_id = user.id
     return user

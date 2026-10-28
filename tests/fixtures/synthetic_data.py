@@ -256,7 +256,7 @@ def generate_canadian_store_network() -> List[tuple]:
     store_idx = 1
     rng = random.Random(42)
 
-    for prov_code, prov_name, prov_target, city_list in PROVINCES_DISTRIBUTION:
+    for prov_code, _prov_name, _prov_target, city_list in PROVINCES_DISTRIBUTION:
         banner_pool = BANNERS_BY_REGION.get(prov_code, ['Supermarket', 'Walmart', 'No Frills'])
         for city_name, city_target, base_lat, base_lon, fsa, quads in city_list:
             for i in range(city_target):

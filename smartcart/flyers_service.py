@@ -114,7 +114,7 @@ def resolve_location_to_postal_code(query: str) -> str:
         return cleaned_pc
 
     # Check city names across Alberta, BC, and Canada Wide
-    for reg_name, reg_data in SUPPORTED_REGIONS.items():
+    for reg_data in SUPPORTED_REGIONS.values():
         for c in reg_data["cities"]:
             if c["city"].lower() in clean_q or clean_q in c["city"].lower():
                 return clean_postal_code(c["postal_code"])

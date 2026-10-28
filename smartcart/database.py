@@ -11,6 +11,7 @@ import datetime
 import json
 import sqlite3
 import statistics
+import tempfile
 import math
 import os
 import re
@@ -19,7 +20,7 @@ from typing import List, Dict, Any, Optional
 
 from smartcart.barcodes import normalize_barcode
 
-DEFAULT_DB_FILE = "smartcart.db" if os.access(".", os.W_OK) else "/tmp/smartcart.db"
+DEFAULT_DB_FILE = "smartcart.db" if os.access(".", os.W_OK) else os.path.join(tempfile.gettempdir(), "smartcart.db")
 DB_PATH = Path(os.environ.get("SMARTCART_DB_PATH", DEFAULT_DB_FILE))
 DATA_DIR = Path(__file__).parent / "data"
 DEFAULT_REGION = os.environ.get("SMARTCART_REGION", "edmonton")

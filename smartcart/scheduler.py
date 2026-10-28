@@ -58,7 +58,7 @@ def evaluate_price_alerts(conn):
             target = a["target_price"]
             # Find lowest price for this product
             cursor.execute("""
-                SELECT MIN(si.price) as min_price 
+                SELECT MIN(si.price) as min_price
                 FROM store_inventory si
                 JOIN products p ON si.product_id = p.id
                 WHERE LOWER(p.name) LIKE ?
@@ -68,8 +68,8 @@ def evaluate_price_alerts(conn):
                 min_price = res["min_price"]
                 is_on_sale = 1 if min_price <= target else 0
                 cursor.execute("""
-                    UPDATE sale_alerts 
-                    SET current_sale_price = ?, is_on_sale = ? 
+                    UPDATE sale_alerts
+                    SET current_sale_price = ?, is_on_sale = ?
                     WHERE id = ?
                 """, (min_price, is_on_sale, a["id"]))
         conn.commit()

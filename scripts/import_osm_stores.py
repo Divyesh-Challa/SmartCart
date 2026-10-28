@@ -188,7 +188,7 @@ def fetch(region: str) -> dict:
     cfg = REGIONS[region]
     payload = None
     last_err = None
-    for attempt in range(2):
+    for _attempt in range(2):
         for url in OVERPASS_URLS:
             try:
                 resp = httpx.post(

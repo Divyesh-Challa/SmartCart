@@ -164,8 +164,8 @@ def upload_custom_flyer_page(req: UploadFlyerRequest, admin: Optional[CurrentUse
 
     try:
         img_bytes = base64.b64decode(raw_b64, validate=True)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Image is not valid base64.")
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail="Image is not valid base64.") from err
     if img_bytes.startswith(PNG_MAGIC):
         ext = "png"
     elif img_bytes.startswith(JPEG_MAGIC):

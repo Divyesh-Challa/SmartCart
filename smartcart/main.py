@@ -929,7 +929,7 @@ def optimize_basket(req: OptimizeBasketRequest):
     origin_query = f"{target_lat},{target_lon}"
 
     # Normalize plan structures to support all frontend conventions
-    for plan_key, plan in result.get("plans", {}).items():
+    for plan in result.get("plans", {}).values():
         if not plan:
             continue
         plan["total_cost"] = plan.get("all_in_cost", 0.0)

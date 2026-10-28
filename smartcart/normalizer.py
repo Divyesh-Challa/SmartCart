@@ -6,6 +6,7 @@ and matches natural language ingredient queries to catalog SKUs.
 
 import math
 import re
+import time
 from typing import Dict, Any, List, Optional, Tuple
 from smartcart.barcodes import normalize_barcode  # noqa: F401  (re-exported)
 from smartcart.database import get_connection, haversine_distance_km
@@ -55,8 +56,6 @@ def normalize_quantity_to_standard(quantity: float, unit: str) -> Tuple[str, flo
 
     multiplier = UNIT_MULTIPLIERS.get(unit_lower, 1.0)
     return "unit", quantity * multiplier
-
-import time
 
 _PRODUCT_CATALOG_CACHE: Optional[List[Dict[str, Any]]] = None
 _CACHE_TIMESTAMP: float = 0.0
