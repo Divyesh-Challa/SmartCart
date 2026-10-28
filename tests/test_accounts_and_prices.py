@@ -179,6 +179,23 @@ class TestAdminFlyers(ApiTestCase):
         self.assertEqual(res.status_code, 201)
 
 
+class TestCompareHonesty(ApiTestCase):
+    def test_compare_reports_freshness_and_never_invents_stores(self):
+        self.submit(auth_headers("cmp-user"), price=5.49)
+        # A flyer deal from a chain with no store in the data must not appear as a made-up store.
+        self.client.post("/api/admin/flyers", headers=ADMIN, json={
+            "banner": "Nonexistent Grocer", "title": "Flyer", "valid_from": self.today, "valid_to": self.today,
+            "deals": [{"title": "Salted Butter 454g", "category": "Dairy", "sale_price": 1.99}],
+        })
+        data = self.client.get("/api/v1/search/compare?q=butter&postal_code=T6E2A1").json()["data"]
+        butter = next(d for d in data if d["product_id"] == self.butter)
+        banners = {st["banner"] for st in butter["stores"]}
+        self.assertNotIn("Nonexistent Grocer", banners)
+        entry = next(st for st in butter["stores"] if st["store_id"] == self.store_id)
+        self.assertEqual(entry["observation_count"], 1)
+        self.assertIsNotNone(entry["last_observed_at"])
+
+
 class TestHttpHardening(ApiTestCase):
     def test_security_headers(self):
         res = self.client.get("/api/coverage/stats")
