@@ -4,14 +4,21 @@ Covers database seeding, recipe parsing, unit price normalization,
 postal code geocoding, Edmonton-wide stores, and interactive weekly digital circulars.
 """
 
-import unittest
+import os
 import sys
+import tempfile
+import unittest
 from pathlib import Path
+
+# Tests run against a throwaway database seeded with synthetic data; never the
+# real smartcart.db. This must be set before any smartcart module is imported.
+os.environ["SMARTCART_DB_PATH"] = os.path.join(tempfile.mkdtemp(prefix="smartcart-test-"), "test.db")
 
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from smartcart.database import init_db, seed_edmonton_data, get_connection, haversine_distance_km
+from smartcart.database import init_db, get_connection, haversine_distance_km
+from tests.fixtures.synthetic_data import seed_synthetic_data as seed_edmonton_data
 from smartcart.parser import parse_ingredient_line, parse_recipe_text
 from smartcart.normalizer import (
     normalize_quantity_to_standard,
@@ -23,6 +30,10 @@ from smartcart.geocoding import resolve_postal_code
 from smartcart.optimizer import BasketOptimizer
 from fastapi.testclient import TestClient
 from smartcart.main import app
+
+def setUpModule():
+    init_db()
+    seed_edmonton_data()
 
 class TestSmartCartDatabase(unittest.TestCase):
     @classmethod

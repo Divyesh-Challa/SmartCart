@@ -1,13 +1,8 @@
 import re
 import time
-import ssl
-import urllib.request
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
-try:
-    UNVERIFIED_SSL = ssl._create_unverified_context()
-except Exception:
-    UNVERIFIED_SSL = None
+import httpx
 
 # Regional gas price benchmarks (CAD / Litre)
 REGIONAL_BENCHMARKS = {
@@ -53,7 +48,7 @@ def fetch_live_edmonton_gas_price(province_or_city: str = "AB") -> Dict[str, Any
             "unit": "$/L",
             "fuel_type": "Regular Unleaded 87",
             "source": "BC Regional Gas Index",
-            "is_live": True,
+            "is_live": False,
             "last_updated": now,
         }
 
@@ -62,22 +57,11 @@ def fetch_live_edmonton_gas_price(province_or_city: str = "AB") -> Dict[str, Any
         return dict(_GAS_PRICE_CACHE)
 
     url = "https://cheapgasedmonton.ca/"
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        },
-    )
 
     try:
-        kwargs = {"timeout": 3.5}
-        if UNVERIFIED_SSL:
-            kwargs["context"] = UNVERIFIED_SSL
-
-        with urllib.request.urlopen(req, **kwargs) as response:
-            html = response.read().decode("utf-8", errors="ignore")
-            match = re.search(r"average reported regular gas price in Edmonton is\s*([\d\.]+)¢/L", html)
+        response = httpx.get(url, headers={"User-Agent": "SmartCart gas price check"}, timeout=3.5)
+        if response.status_code == 200:
+            match = re.search(r"average reported regular gas price in Edmonton is\s*([\d\.]+)¢/L", response.text)
             if match:
                 cents = float(match.group(1))
                 price_per_litre = round(cents / 100.0, 2)
@@ -88,7 +72,7 @@ def fetch_live_edmonton_gas_price(province_or_city: str = "AB") -> Dict[str, Any
                     "last_updated": now,
                 })
                 return dict(_GAS_PRICE_CACHE)
-    except Exception:
+    except httpx.HTTPError:
         pass
 
     _GAS_PRICE_CACHE["last_updated"] = now

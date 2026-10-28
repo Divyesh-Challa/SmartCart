@@ -106,7 +106,7 @@
           </button>
           <button onclick="openSyncModal()" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all border border-white/10 cursor-pointer" title="Store Data Synchronization Status">
             <span class="w-2 h-2 rounded-full bg-sc-emerald animate-pulse"></span>
-            <span id="navSyncBadgeText">3,524 Stores Live</span>
+            <span id="navSyncBadgeText">Edmonton Beta</span>
           </button>
           <button onclick="toggleDarkMode()" class="w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors" title="Toggle Appearance">
             <i class="fa-solid fa-moon text-sm theme-toggle-icon"></i>
@@ -335,12 +335,12 @@
         </button>
       </div>
       <p class="text-xs text-sc-muted dark:text-slate-400">
-        SmartCart indexes weekly circulars across 35 Canadian chains every Thursday at 12:01 AM. You can also trigger an on-demand refresh.
+        SmartCart rebuilds store prices from recent shopper-submitted prices every 6 hours. Store locations © OpenStreetMap contributors. You can also trigger an on-demand refresh.
       </p>
       <div class="p-4 rounded-2xl bg-sc-canvas dark:bg-sc-midnight space-y-2 text-xs">
         <div class="flex justify-between">
           <span class="text-sc-muted dark:text-slate-400">Supermarket Stores Indexed:</span>
-          <span class="font-black text-sc-ink dark:text-white">3,524 Locations</span>
+          <span class="font-black text-sc-ink dark:text-white" data-stores-indexed>Edmonton area</span>
         </div>
         <div class="flex justify-between">
           <span class="text-sc-muted dark:text-slate-400">Current Flyer Cycle:</span>

@@ -1,25 +1,16 @@
 """
-SmartCart Canadian Grocery Flyer & Deals Sourcing Service
-Integrates live Canadian flyer circulars across all Canadian grocery stores,
-with primary focus on Alberta (Edmonton, Calgary, Red Deer, etc.) and
-British Columbia (Vancouver, Victoria, Kelowna, Surrey, etc.).
+SmartCart Canadian Grocery Flyer & Deals Service
+
+Flyers and their deals are read from the local database only. They are entered
+by an admin or will arrive through a licensed flyer data feed; nothing here
+calls third-party flyer APIs, and nothing is invented when no flyer is on file.
 """
 
+import datetime
 import re
-import time
-import json
-import ssl
-import urllib.request
-import urllib.parse
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
-try:
-    SSL_CONTEXT = ssl.create_default_context()
-except Exception:
-    SSL_CONTEXT = ssl._create_unverified_context()
-
-# For broad compatibility across self-signed environments:
-UNVERIFIED_SSL_CONTEXT = ssl._create_unverified_context()
+from smartcart.database import get_connection
 
 # Supported Canadian Regions & Cities with their primary postal codes
 SUPPORTED_REGIONS = {
@@ -101,7 +92,6 @@ DEFAULT_BANNER_THEME = {"bg": "bg-slate-700", "text": "text-white", "badge": "We
 # In-memory flyer and deals caches (TTL: 1 hour)
 _FLYERS_CACHE: Dict[str, Dict[str, Any]] = {}
 _FLYER_ITEMS_CACHE: Dict[int, Dict[str, Any]] = {}
-CACHE_TTL = 3600  # 1 hour
 
 
 def clean_postal_code(raw: str) -> str:
@@ -177,251 +167,107 @@ def get_city_for_postal_code(postal_code_or_city: str) -> Dict[str, Any]:
         return {"city": "Canada", "province": "Canada Wide", "province_code": "CA", "postal_code": clean_pc, "lat": 43.6532, "lon": -79.3832}
 
 
+def _today() -> str:
+    return datetime.date.today().isoformat()
+
+
 def fetch_live_flyers(postal_code_or_city: str = "T5K2X4") -> List[Dict[str, Any]]:
-    """
-    Fetches active grocery flyers for a given Canadian location from Flipp.
-    Falls back gracefully to cached and offline flyer catalogs.
-    """
-    postal_code = resolve_location_to_postal_code(postal_code_or_city)
-    now = time.time()
-
-    # Return cached flyers if fresh
-    if postal_code in _FLYERS_CACHE:
-        cache_entry = _FLYERS_CACHE[postal_code]
-        if now - cache_entry["time"] < CACHE_TTL:
-            return cache_entry["data"]
-
-    url = f"https://backflipp.wishabi.com/flipp/flyers?postal_code={postal_code}"
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*"
-        }
-    )
-
-    flyers_list = []
-    try:
-        with urllib.request.urlopen(req, context=UNVERIFIED_SSL_CONTEXT, timeout=4.5) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            raw_flyers = data.get("flyers", [])
-
-            for f in raw_flyers:
-                categories = f.get("categories", [])
-                # Filter for grocery, food, or supermarket flyers
-                is_grocery = any(c in ["Groceries", "Food", "Supermarket"] or "Groc" in c or "Food" in c for c in categories)
-                if not is_grocery:
-                    continue
-
-                merchant = f.get("merchant", "Supermarket").strip()
-                theme = BANNER_THEMES.get(merchant, DEFAULT_BANNER_THEME)
-
-                # Page count estimate based on resolutions or width
-                resolutions = f.get("resolutions", [])
-                page_count = len(resolutions) if resolutions else 4
-
-                valid_from = (f.get("valid_from") or "")[:10]
-                valid_to = (f.get("valid_to") or "")[:10]
-
-                flyers_list.append({
-                    "id": f.get("id"),
-                    "merchant": merchant,
-                    "banner": merchant,
-                    "title": f.get("name") or f"{merchant} Weekly Circular",
-                    "valid_from": valid_from,
-                    "valid_to": valid_to,
-                    "total_pages": page_count,
-                    "thumbnail_url": f.get("thumbnail_url"),
-                    "merchant_logo": f.get("merchant_logo"),
-                    "badge_text": theme["badge"],
-                    "theme": theme,
-                    "categories": categories,
-                    "is_live": True
-                })
-
-    except Exception as e:
-        # Fall back to offline high-fidelity flyer catalog
-        flyers_list = get_fallback_flyers(postal_code)
-
-    if not flyers_list:
-        flyers_list = get_fallback_flyers(postal_code)
-
-    _FLYERS_CACHE[postal_code] = {"time": now, "data": flyers_list}
-    return flyers_list
-
-
-def fetch_flyer_deals(flyer_id: int) -> List[Dict[str, Any]]:
-    """
-    Fetches deals and products contained within a specific flyer circular.
-    """
-    now = time.time()
-    if flyer_id in _FLYER_ITEMS_CACHE:
-        cache_entry = _FLYER_ITEMS_CACHE[flyer_id]
-        if now - cache_entry["time"] < CACHE_TTL:
-            return cache_entry["data"]
-
-    url = f"https://backflipp.wishabi.com/flipp/flyers/{flyer_id}"
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-            "Accept": "application/json"
-        }
-    )
-
-    deals = []
-    try:
-        with urllib.request.urlopen(req, context=UNVERIFIED_SSL_CONTEXT, timeout=5.0) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            items = data.get("items", [])
-
-            for it in items:
-                name = it.get("name")
-                if not name:
-                    continue
-
-                raw_price = it.get("price")
-                try:
-                    price_val = float(raw_price) if raw_price else None
-                except (ValueError, TypeError):
-                    price_val = None
-
-                deals.append({
-                    "id": it.get("id"),
-                    "name": name,
-                    "brand": it.get("brand") or "",
-                    "price": price_val,
-                    "price_display": f"${price_val:.2f}" if price_val is not None else "Special Deal",
-                    "cutout_image_url": it.get("cutout_image_url") or "https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&auto=format&fit=crop",
-                    "valid_from": (it.get("valid_from") or "")[:10],
-                    "valid_to": (it.get("valid_to") or "")[:10],
-                    "discount_text": it.get("discount") or "Flyer Special"
-                })
-
-    except Exception:
-        deals = get_fallback_deals_for_flyer(flyer_id)
-
-    if not deals:
-        deals = get_fallback_deals_for_flyer(flyer_id)
-
-    _FLYER_ITEMS_CACHE[flyer_id] = {"time": now, "data": deals}
-    return deals
-
-
-def search_flyer_items(query: str, postal_code_or_city: str = "T5K2X4") -> List[Dict[str, Any]]:
-    """
-    Searches active grocery flyers for a given query (e.g. 'eggs', 'chicken', 'milk', 'butter')
-    in the specified city or postal code.
-    """
-    postal_code = resolve_location_to_postal_code(postal_code_or_city)
-    encoded_query = urllib.parse.quote(query.strip())
-    url = f"https://backflipp.wishabi.com/flipp/items/search?q={encoded_query}&postal_code={postal_code}"
-
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-            "Accept": "application/json"
-        }
-    )
-
-    results = []
-    try:
-        with urllib.request.urlopen(req, context=UNVERIFIED_SSL_CONTEXT, timeout=4.5) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            items = data.get("items", [])
-
-            for it in items:
-                curr_price = it.get("current_price")
-                orig_price = it.get("original_price")
-                merchant = it.get("merchant_name") or "Supermarket"
-
-                results.append({
-                    "id": it.get("id"),
-                    "name": it.get("name"),
-                    "merchant": merchant,
-                    "current_price": float(curr_price) if curr_price is not None else None,
-                    "original_price": float(orig_price) if orig_price is not None else None,
-                    "pre_price_text": it.get("pre_price_text"),
-                    "post_price_text": it.get("post_price_text"),
-                    "image_url": it.get("clean_image_url") or it.get("clipping_image_url") or "https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&auto=format&fit=crop",
-                    "valid_from": (it.get("valid_from") or "")[:10],
-                    "valid_to": (it.get("valid_to") or "")[:10],
-                    "sale_story": it.get("sale_story"),
-                    "theme": BANNER_THEMES.get(merchant, DEFAULT_BANNER_THEME)
-                })
-    except Exception:
-        pass
-
-    return results
-
-
-def get_fallback_flyers(postal_code: str) -> List[Dict[str, Any]]:
-    """Curated fallbacks across Alberta, BC, and Canada if Flipp is temporarily unreachable."""
-    first = postal_code[0] if postal_code else "T"
-
-    if first == "V":  # British Columbia
-        banners = [
-            ("Save-On-Foods", "Save-On-Foods Weekly Flyer - Lower Mainland", "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop", 8),
-            ("Choices Markets", "100% BC Local Organic Groceries", "https://images.unsplash.com/photo-1610348725531-843dff563e2c?w=400&auto=format&fit=crop", 6),
-            ("No Frills", "Won't Be Beat Weekly Haul", "https://images.unsplash.com/photo-1506484381205-f7945653044d?w=400&auto=format&fit=crop", 6),
-            ("Real Canadian Superstore", "Superstore Massive Savings Event", "https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=400&auto=format&fit=crop", 12),
-            ("Walmart", "Rollback Grocery Supercentre Circular", "https://images.unsplash.com/photo-1583258292688-d0213dc5a3a8?w=400&auto=format&fit=crop", 8),
-            ("FreshCo", "Price Match Lowering Food Prices", "https://images.unsplash.com/photo-1608686207856-001b95cf60ca?w=400&auto=format&fit=crop", 6),
-            ("Thrifty Foods", "Vancouver Island Fresh Catch", "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=400&auto=format&fit=crop", 8),
-            ("T&T Supermarket", "Pan-Asian Seafood & Produce Special", "https://images.unsplash.com/photo-1580913437719-7589d81d45bc?w=400&auto=format&fit=crop", 10),
-        ]
-    elif first == "T":  # Alberta
-        banners = [
-            ("No Frills", "No Frills Haul of the Week", "https://images.unsplash.com/photo-1506484381205-f7945653044d?w=400&auto=format&fit=crop", 6),
-            ("Real Canadian Superstore", "Optimum Big Deal Savings", "https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=400&auto=format&fit=crop", 12),
-            ("Walmart", "Rollback Grocery Supercentre", "https://images.unsplash.com/photo-1583258292688-d0213dc5a3a8?w=400&auto=format&fit=crop", 8),
-            ("Calgary Co-op", "Member Owned Alberta Harvest Flyer", "https://images.unsplash.com/photo-1610348725531-843dff563e2c?w=400&auto=format&fit=crop", 8),
-            ("Safeway", "Scene+ Member Favourites Circular", "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop", 8),
-            ("Save-On-Foods", "Western Canadian Family Grocery Deals", "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=400&auto=format&fit=crop", 8),
-            ("FreshCo", "Lowering Prices Everyday", "https://images.unsplash.com/photo-1608686207856-001b95cf60ca?w=400&auto=format&fit=crop", 6),
-            ("Sobeys", "Better Food For All Fall Deals", "https://images.unsplash.com/photo-1588964895597-cfccd6e2dbf9?w=400&auto=format&fit=crop", 8),
-        ]
-    else:  # Canada Wide
-        banners = [
-            ("Metro", "Fresh Discoveries & Moi Rewards", "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop", 8),
-            ("No Frills", "Won't Be Beat Lowest Prices", "https://images.unsplash.com/photo-1506484381205-f7945653044d?w=400&auto=format&fit=crop", 6),
-            ("Walmart", "Great Value Grocery Rollback", "https://images.unsplash.com/photo-1583258292688-d0213dc5a3a8?w=400&auto=format&fit=crop", 8),
-            ("Real Canadian Superstore", "PC Optimum President's Choice", "https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=400&auto=format&fit=crop", 12),
-            ("Food Basics", "Always More For Less", "https://images.unsplash.com/photo-1608686207856-001b95cf60ca?w=400&auto=format&fit=crop", 6),
-            ("Sobeys", "Better Food For All", "https://images.unsplash.com/photo-1588964895597-cfccd6e2dbf9?w=400&auto=format&fit=crop", 8),
-        ]
+    """Returns flyers on file whose validity window includes today."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT f.id, f.banner, f.title, f.total_pages, f.valid_from, f.valid_to, f.badge_text,
+               (SELECT COUNT(*) FROM flyer_deals d WHERE d.flyer_id = f.id) AS deals_count
+        FROM flyers f
+        WHERE f.valid_from <= ? AND f.valid_to >= ?
+        ORDER BY f.banner
+    """, (_today(), _today()))
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
 
     flyers = []
-    for i, (merchant, title, thumb, pages) in enumerate(banners, start=1001):
-        theme = BANNER_THEMES.get(merchant, DEFAULT_BANNER_THEME)
+    for r in rows:
+        theme = BANNER_THEMES.get(r["banner"], DEFAULT_BANNER_THEME)
         flyers.append({
-            "id": i,
-            "merchant": merchant,
-            "banner": merchant,
-            "title": title,
-            "valid_from": "2026-10-01",
-            "valid_to": "2026-10-07",
-            "total_pages": pages,
-            "thumbnail_url": thumb,
+            "id": r["id"],
+            "merchant": r["banner"],
+            "banner": r["banner"],
+            "title": r["title"],
+            "valid_from": r["valid_from"],
+            "valid_to": r["valid_to"],
+            "total_pages": r["total_pages"],
+            "thumbnail_url": None,
             "merchant_logo": None,
-            "badge_text": theme["badge"],
+            "badge_text": r["badge_text"] or theme["badge"],
             "theme": theme,
-            "categories": ["All Flyers", "Groceries"],
-            "is_live": False
+            "deals_count": r["deals_count"],
+            "is_live": True,
         })
     return flyers
 
 
-def get_fallback_deals_for_flyer(flyer_id: int) -> List[Dict[str, Any]]:
-    """Curated staples with real Canadian supermarket prices."""
+def fetch_flyer_deals(flyer_id: int) -> List[Dict[str, Any]]:
+    """Returns the deals recorded for a flyer."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT d.id, COALESCE(d.item_name, d.title) AS name, d.sale_price, d.original_price,
+               d.discount_text, f.valid_from, f.valid_to
+        FROM flyer_deals d
+        JOIN flyers f ON f.id = d.flyer_id
+        WHERE d.flyer_id = ?
+        ORDER BY d.page_number, d.sale_price
+    """, (flyer_id,))
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
     return [
-        {"id": 1, "name": "Fresh Canadian Atlantic Salmon Fillets", "brand": "Fresh Catch", "price": 10.99, "price_display": "$10.99", "discount_text": "Save $4.00 (27% OFF)", "cutout_image_url": "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=300&auto=format&fit=crop"},
-        {"id": 2, "name": "Lactantia Salted Butter 454g", "brand": "Lactantia", "price": 4.99, "price_display": "$4.99", "discount_text": "Save $3.00 (38% OFF)", "cutout_image_url": "https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?w=300&auto=format&fit=crop"},
-        {"id": 3, "name": "Italpasta Fusilli Pasta 750g", "brand": "Italpasta", "price": 0.99, "price_display": "$0.99", "discount_text": "Save $1.30 (57% OFF)", "cutout_image_url": "https://images.unsplash.com/photo-1621996346565-e3d5d628169e?w=300&auto=format&fit=crop"},
-        {"id": 4, "name": "Large Grade A White Eggs 12-pack", "brand": "Farm Fresh", "price": 3.29, "price_display": "$3.29", "discount_text": "Save $0.90 (21% OFF)", "cutout_image_url": "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?w=300&auto=format&fit=crop"},
-        {"id": 5, "name": "Boneless Skinless Chicken Thighs 1kg", "brand": "Free From", "price": 9.99, "price_display": "$9.99", "discount_text": "Save $3.50 (26% OFF)", "cutout_image_url": "https://images.unsplash.com/photo-1604503468506-a8da13d82791?w=300&auto=format&fit=crop"},
-        {"id": 6, "name": "Hass Avocados (Bag of 5)", "brand": "Import", "price": 3.99, "price_display": "$3.99", "discount_text": "Save $2.00 (33% OFF)", "cutout_image_url": "https://images.unsplash.com/photo-1523049673857-eb18f1d7b578?w=300&auto=format&fit=crop"},
-        {"id": 7, "name": "White Potatoes 10 lb Bag", "brand": "Canada No. 1", "price": 1.99, "price_display": "$1.99", "discount_text": "Save $4.00 (67% OFF)", "cutout_image_url": "https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=300&auto=format&fit=crop"},
-        {"id": 8, "name": "Dairyland 2% Partly Skimmed Milk 4L", "brand": "Dairyland", "price": 5.69, "price_display": "$5.69", "discount_text": "Flyer Special", "cutout_image_url": "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=300&auto=format&fit=crop"},
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "brand": "",
+            "price": r["sale_price"],
+            "price_display": f"${r['sale_price']:.2f}",
+            "cutout_image_url": None,
+            "valid_from": r["valid_from"],
+            "valid_to": r["valid_to"],
+            "discount_text": r["discount_text"] or "Flyer Special",
+        }
+        for r in rows
+    ]
+
+
+def search_flyer_items(query: str, postal_code_or_city: str = "T5K2X4") -> List[Dict[str, Any]]:
+    """Searches deals in currently valid flyers by item name."""
+    q = query.strip()
+    if not q:
+        return []
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT d.id, COALESCE(d.item_name, d.title) AS name, f.banner, d.sale_price, d.original_price,
+               d.discount_text, f.valid_from, f.valid_to
+        FROM flyer_deals d
+        JOIN flyers f ON f.id = d.flyer_id
+        WHERE f.valid_from <= ? AND f.valid_to >= ?
+          AND (d.title LIKE ? OR d.item_name LIKE ?)
+        ORDER BY d.sale_price
+    """, (_today(), _today(), f"%{q}%", f"%{q}%"))
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "merchant": r["banner"],
+            "current_price": r["sale_price"],
+            "original_price": r["original_price"],
+            "pre_price_text": None,
+            "post_price_text": None,
+            "image_url": None,
+            "valid_from": r["valid_from"],
+            "valid_to": r["valid_to"],
+            "sale_story": r["discount_text"],
+            "theme": BANNER_THEMES.get(r["banner"], DEFAULT_BANNER_THEME),
+        }
+        for r in rows
     ]

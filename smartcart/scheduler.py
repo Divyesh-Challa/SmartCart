@@ -1,21 +1,17 @@
 """
 SmartCart Automated Data Refresh & Background Scheduler Module
-Regularly syncs store inventories, weekly flyer deals, provincial gas prices,
-and price drop alerts across all 3,524 Canadian supermarkets.
+Regularly rebuilds store prices from crowdsourced price observations, refreshes
+provincial gas prices, and evaluates price drop alerts.
 """
 
 import asyncio
 import datetime
-import math
-import os
-import random
 import sqlite3
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
-from smartcart.database import get_connection, DB_PATH
-from smartcart.gas_service import fetch_live_edmonton_gas_price, get_current_gas_price
-from smartcart.flyers_service import fetch_live_flyers, SUPPORTED_REGIONS
+from smartcart.database import get_connection, refresh_inventory_from_observations
+from smartcart.gas_service import fetch_live_edmonton_gas_price
 
 # Default background sync interval: 6 hours (21,600 seconds)
 DEFAULT_SYNC_INTERVAL_SECONDS = 6 * 3600
@@ -72,69 +68,6 @@ def get_current_flyer_cycle() -> Dict[str, Any]:
         "is_reset_day": day_of_week == 3
     }
 
-def update_inventory_promotions(conn: sqlite3.Connection, cycle_start_str: str) -> int:
-    """
-    Dynamically refreshes flyer sale promotions across store inventories.
-    Uses the calendar cycle as a deterministic seed so all stores have fresh,
-    realistic weekly sales while keeping data consistent throughout the week.
-    """
-    cursor = conn.cursor()
-    
-    # Generate seed based on current flyer cycle
-    seed_val = int(cycle_start_str.replace("-", ""))
-    rng = random.Random(seed_val)
-    
-    # Select products to feature on flyer discount this cycle (approx 40% of catalog)
-    cursor.execute("SELECT id, name, category, normalized_amount FROM products")
-    products = cursor.fetchall()
-    
-    if not products:
-        return 0
-
-    discount_map = {}
-    for p in products:
-        pid = p["id"]
-        # Rotate weekly deal discount between 10% and 38%
-        if rng.random() < 0.40:
-            discount = rng.uniform(0.12, 0.38)
-            discount_map[pid] = discount
-        else:
-            discount_map[pid] = 0.0
-
-    # Fetch store inventory items to update prices
-    cursor.execute("SELECT id, store_id, product_id, price FROM store_inventory LIMIT 10000")
-    inventory_rows = cursor.fetchall()
-
-    updated = 0
-    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    
-    # We update weekly flyer pricing on a rotating batch of inventory items
-    for row in inventory_rows:
-        pid = row["product_id"]
-        disc = discount_map.get(pid, 0.0)
-        orig_price = row["price"]
-        if disc > 0:
-            new_price = round(orig_price * (1.0 - disc), 2)
-            cursor.execute(
-                "UPDATE store_inventory SET price = ?, updated_at = ? WHERE id = ?",
-                (new_price, now_iso, row["id"])
-            )
-            updated += 1
-
-    conn.commit()
-    return updated
-
-def update_flyer_validity_dates(conn: sqlite3.Connection, cycle: Dict[str, Any]):
-    """
-    Updates all cached flyer dates in SQLite to align with the active weekly cycle.
-    """
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE flyers 
-        SET valid_from = ?, valid_to = ?
-    """, (cycle["start_date"], cycle["end_date"]))
-    conn.commit()
-
 def evaluate_price_alerts(conn: sqlite3.Connection):
     """
     Evaluates active price alerts against current product prices.
@@ -168,12 +101,11 @@ def evaluate_price_alerts(conn: sqlite3.Connection):
 
 def perform_data_sync() -> Dict[str, Any]:
     """
-    Executes a complete synchronization across all 3,524 stores:
+    Executes a complete synchronization:
     1. Provincial gas price benchmarks ($/L).
-    2. Weekly flyer dates & promotional discounts.
-    3. Inventory price adjustments.
-    4. Price drop alerts evaluation.
-    5. Sync audit logging.
+    2. Store price cache rebuilt from recent price observations.
+    3. Price drop alerts evaluation.
+    4. Sync audit logging.
     """
     start_time = time.time()
     conn = get_connection()
@@ -196,10 +128,11 @@ def perform_data_sync() -> Dict[str, Any]:
 
     # 4. Flyer cycle
     cycle = get_current_flyer_cycle()
-    update_flyer_validity_dates(conn, cycle)
 
-    # 5. Inventory rotation
-    updated_inv = update_inventory_promotions(conn, cycle["start_date"])
+    # 5. Rebuild store prices from observations
+    updated_inv = refresh_inventory_from_observations(conn)
+    cursor.execute("SELECT COUNT(*) as count FROM store_inventory")
+    inventory_count = cursor.fetchone()["count"]
 
     # 6. Evaluate alerts
     evaluate_price_alerts(conn)
@@ -222,7 +155,7 @@ def perform_data_sync() -> Dict[str, Any]:
     """, (
         now_str, stores_count, inventory_count, flyer_deals_count,
         gas_ab, gas_bc, cycle["cycle_label"], "SUCCESS",
-        f"Updated {updated_inv} inventory promo prices; synced live gas at ${gas_ab:.3f}/L",
+        f"Rebuilt {updated_inv} store prices from observations; synced gas at ${gas_ab:.3f}/L",
         next_sync_str
     ))
 
@@ -246,7 +179,7 @@ def perform_data_sync() -> Dict[str, Any]:
         "duration_seconds": elapsed,
         "stores_count": stores_count,
         "inventory_rows_count": inventory_count,
-        "inventory_promotions_updated": updated_inv,
+        "inventory_prices_rebuilt": updated_inv,
         "flyer_deals_count": flyer_deals_count,
         "flyer_cycle": cycle,
         "gas_prices": {
@@ -274,8 +207,9 @@ def get_sync_status() -> Dict[str, Any]:
 
     if not row:
         conn.close()
-        # Trigger an initial sync if none exists
-        return perform_data_sync()
+        # Run an initial sync, then report status in the usual shape.
+        perform_data_sync()
+        return get_sync_status()
 
     cursor.execute("SELECT COUNT(*) as count FROM stores")
     stores_count = cursor.fetchone()["count"]
@@ -309,7 +243,7 @@ async def background_sync_worker(interval_seconds: int = DEFAULT_SYNC_INTERVAL_S
         try:
             print("[SmartCart Scheduler] Executing scheduled Canadian grocery data sync...")
             result = perform_data_sync()
-            print(f"[SmartCart Scheduler] Sync completed successfully: {result['stores_count']} stores, {result['inventory_promotions_updated']} promos updated")
+            print(f"[SmartCart Scheduler] Sync completed successfully: {result['stores_count']} stores, {result['inventory_prices_rebuilt']} prices rebuilt")
         except Exception as e:
             print(f"[SmartCart Scheduler] Sync error during scheduled run: {e}")
         

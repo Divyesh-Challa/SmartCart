@@ -162,20 +162,20 @@ CANADIAN_FSA_TABLE = {
 }
 
 EXACT_POSTAL_CODES = {
-    "T5G3E8": {"name": "Real Canadian Superstore - Kingsway", "city": "Edmonton", "province": "Alberta", "lat": 53.5606, "lon": -113.5137},
-    "T6A0A1": {"name": "Walmart Supercentre - Capilano", "city": "Edmonton", "province": "Alberta", "lat": 53.5358, "lon": -113.4182},
-    "T6E2A1": {"name": "No Frills - Old Strathcona", "city": "Edmonton", "province": "Alberta", "lat": 53.5186, "lon": -113.4988},
-    "T5K2X4": {"name": "Safeway - Unity Square", "city": "Edmonton", "province": "Alberta", "lat": 53.5469, "lon": -113.5147},
-    "T6X1N2": {"name": "Costco Wholesale - 91 St SW", "city": "Edmonton", "province": "Alberta", "lat": 53.4215, "lon": -113.4682},
-    "T6N1J8": {"name": "Real Canadian Superstore - South Common", "city": "Edmonton", "province": "Alberta", "lat": 53.4508, "lon": -113.4883},
+    "T5G3E8": {"name": "Kingsway", "city": "Edmonton", "province": "Alberta", "lat": 53.5606, "lon": -113.5137},
+    "T6A0A1": {"name": "Capilano", "city": "Edmonton", "province": "Alberta", "lat": 53.5358, "lon": -113.4182},
+    "T6E2A1": {"name": "Old Strathcona", "city": "Edmonton", "province": "Alberta", "lat": 53.5186, "lon": -113.4988},
+    "T5K2X4": {"name": "Oliver", "city": "Edmonton", "province": "Alberta", "lat": 53.5469, "lon": -113.5147},
+    "T6X1N2": {"name": "Southeast Edmonton", "city": "Edmonton", "province": "Alberta", "lat": 53.4215, "lon": -113.4682},
+    "T6N1J8": {"name": "South Edmonton Common", "city": "Edmonton", "province": "Alberta", "lat": 53.4508, "lon": -113.4883},
     
     # Calgary
     "T2P1J9": {"name": "Calgary City Centre", "city": "Calgary", "province": "Alberta", "lat": 51.0486, "lon": -114.0708},
-    "T2H2V9": {"name": "Chinook Centre Supermarket District", "city": "Calgary", "province": "Alberta", "lat": 50.9980, "lon": -114.0680},
+    "T2H2V9": {"name": "Chinook / Meadowlark Park", "city": "Calgary", "province": "Alberta", "lat": 50.9980, "lon": -114.0680},
     
     # Vancouver
     "V6B1A1": {"name": "Vancouver Robson & Granville Core", "city": "Vancouver", "province": "British Columbia", "lat": 49.2827, "lon": -123.1207},
-    "V5X3X8": {"name": "Marine Gateway Shopping Hub", "city": "Vancouver", "province": "British Columbia", "lat": 49.2130, "lon": -123.1020},
+    "V5X3X8": {"name": "Marpole / Marine Gateway", "city": "Vancouver", "province": "British Columbia", "lat": 49.2130, "lon": -123.1020},
 }
 
 
