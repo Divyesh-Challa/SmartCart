@@ -18,6 +18,7 @@ os.environ["SMARTCART_DB_PATH"] = os.path.join(tempfile.mkdtemp(prefix="smartcar
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from smartcart.database import init_db, get_connection, haversine_distance_km
+from tests.db_utils import reset_database
 from tests.fixtures.synthetic_data import seed_synthetic_data as seed_edmonton_data
 from smartcart.parser import parse_ingredient_line, parse_recipe_text
 from smartcart.normalizer import (
@@ -32,7 +33,7 @@ from fastapi.testclient import TestClient
 from smartcart.main import app
 
 def setUpModule():
-    init_db()
+    reset_database()
     seed_edmonton_data()
 
 class TestSmartCartDatabase(unittest.TestCase):
@@ -273,11 +274,11 @@ class TestSmartCartEnhancementsTDD(unittest.TestCase):
         self.assertEqual(normalize_barcode("8001234567890"), "8001234567890")
 
     def test_flyer_deals_structured_columns(self):
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("PRAGMA table_info(flyer_deals)")
-        columns = {row["name"] for row in c.fetchall()}
-        conn.close()
+        import sqlalchemy as sa
+        from smartcart.database import sqlalchemy_url
+        engine = sa.create_engine(sqlalchemy_url())
+        columns = {col["name"] for col in sa.inspect(engine).get_columns("flyer_deals")}
+        engine.dispose()
         required_cols = {"store_name", "title", "sale_price", "unit_size", "valid_until", "category"}
         self.assertTrue(required_cols.issubset(columns), f"Missing columns in flyer_deals: {required_cols - columns}")
 

@@ -38,11 +38,12 @@ def seed_dealdish_tables(conn):
             ("055000123789", "Folgers Classic Roast Ground Coffee (960g)", "Folgers", "960g", "Pantry", 9.99, 15.99, "Safeway", 1, 2, 0.3, 0.0, 0.0, 0.0, 5.0, "A", "100% Pure Mountain Grown Arabica and Robusta Coffee.", "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=400&auto=format&fit=crop")
         ]
         cursor.executemany("""
-            INSERT OR REPLACE INTO barcode_products (
+            INSERT INTO barcode_products (
                 barcode, name, brand, package_size, category, sale_price, regular_price,
                 banner, is_on_sale, calories, protein_g, carbs_g, fat_g, fiber_g, sodium_mg,
                 nutri_score, ingredients_text, image_url
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(barcode) DO NOTHING
         """, barcode_seeds)
 
     # 2. Savings Receipts
@@ -575,10 +576,13 @@ def seed_synthetic_data(force: bool = False):
         WHERE valid_until IS NULL
     """)
     cursor.execute("""
-        UPDATE flyer_deals
-        SET unit_size = (SELECT printf('%g %s', p.package_quantity, p.package_unit) FROM products p WHERE p.id = flyer_deals.product_id)
-        WHERE (unit_size IS NULL OR unit_size = '') AND product_id IS NOT NULL
+        SELECT d.id, p.package_quantity, p.package_unit FROM flyer_deals d
+        JOIN products p ON p.id = d.product_id
+        WHERE d.unit_size IS NULL OR d.unit_size = ''
     """)
+    for r in cursor.fetchall():
+        cursor.execute("UPDATE flyer_deals SET unit_size = ? WHERE id = ?",
+                       (f"{r['package_quantity']:g} {r['package_unit']}", r["id"]))
     cursor.execute("SELECT id, title FROM flyer_deals WHERE unit_size IS NULL OR unit_size = ''")
     for r in cursor.fetchall():
         u_size = extract_unit_size(r["title"])

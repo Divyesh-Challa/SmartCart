@@ -11,12 +11,21 @@ from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from pathlib import Path
-import os
-import base64
-import re
 import asyncio
+import base64
+import datetime
+import os
+import re
+import statistics
 
-from smartcart.database import bootstrap_database, get_connection, haversine_distance_km
+import httpx
+
+from smartcart.database import (
+    PRICE_OBSERVATION_WINDOW_DAYS,
+    bootstrap_database,
+    get_connection,
+    haversine_distance_km,
+)
 from smartcart.parser import parse_recipe_text, parse_ingredient_line
 from smartcart.normalizer import match_product_in_catalog, get_product_prices_across_stores, normalize_barcode
 from smartcart.optimizer import BasketOptimizer, DEFAULT_USER_LAT, DEFAULT_USER_LON
@@ -332,8 +341,9 @@ def get_coverage_stats():
         WHERE province IS NOT NULL GROUP BY province ORDER BY count DESC
     """).fetchall()
     priced_stores = c.execute("SELECT COUNT(DISTINCT store_id) AS n FROM store_inventory").fetchone()["n"]
+    cutoff = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)).isoformat(timespec="seconds")
     observations_30d = c.execute(
-        "SELECT COUNT(*) AS n FROM price_observations WHERE observed_at >= datetime('now', '-30 days')"
+        "SELECT COUNT(*) AS n FROM price_observations WHERE observed_at >= ?", (cutoff,)
     ).fetchone()["n"]
     recipes = c.execute("SELECT COUNT(*) AS n FROM flyer_recipes").fetchone()["n"]
     conn.close()
@@ -351,243 +361,164 @@ def get_coverage_stats():
         "attribution": "Store locations © OpenStreetMap contributors (ODbL)",
     }
 
+OPEN_FOOD_FACTS_URL = "https://world.openfoodfacts.org/api/v2/product/{code}.json"
+OPEN_FOOD_FACTS_FIELDS = "product_name,product_name_en,brands,quantity,image_front_url,nutriscore_grade,nutriments,ingredients_text,ingredients_text_en,categories"
+
+def _optional_float(value) -> Optional[float]:
+    try:
+        return round(float(value), 2) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+def fetch_open_food_facts(code: str) -> Optional[Dict[str, Any]]:
+    """Product details from Open Food Facts (ODbL). Missing fields stay None."""
+    try:
+        resp = httpx.get(
+            OPEN_FOOD_FACTS_URL.format(code=code),
+            params={"fields": OPEN_FOOD_FACTS_FIELDS},
+            headers={"User-Agent": "SmartCart/0.2 (grocery price comparison; contact via app)"},
+            timeout=4.0,
+        )
+        data = resp.json() if resp.status_code == 200 else {}
+    except (httpx.HTTPError, ValueError):
+        return None
+    prod = data.get("product") if data.get("status") in (1, "product found") else None
+    if not prod:
+        return None
+    nutriments = prod.get("nutriments", {})
+    sodium_g = _optional_float(nutriments.get("sodium_100g"))
+    calories = _optional_float(nutriments.get("energy-kcal_100g"))
+    return {
+        "barcode": code,
+        "name": prod.get("product_name") or prod.get("product_name_en") or None,
+        "brand": prod.get("brands") or None,
+        "package_size": prod.get("quantity") or None,
+        "category": (prod.get("categories") or "").split(",")[0].strip() or None,
+        "image_url": prod.get("image_front_url") or None,
+        "calories": int(calories) if calories is not None else None,
+        "protein_g": _optional_float(nutriments.get("proteins_100g")),
+        "carbs_g": _optional_float(nutriments.get("carbohydrates_100g")),
+        "fat_g": _optional_float(nutriments.get("fat_100g")),
+        "fiber_g": _optional_float(nutriments.get("fiber_100g")),
+        "sodium_mg": round(sodium_g * 1000, 1) if sodium_g is not None else None,
+        "nutri_score": (prod.get("nutriscore_grade") or "").upper() or None,
+        "ingredients_text": prod.get("ingredients_text") or prod.get("ingredients_text_en") or None,
+        "source": "openfoodfacts",
+    }
+
+def _cache_product_info(conn, info: Dict[str, Any]) -> None:
+    conn.execute("""
+        INSERT INTO barcode_products (
+            barcode, name, brand, package_size, category, image_url, calories, protein_g,
+            carbs_g, fat_g, fiber_g, sodium_mg, nutri_score, ingredients_text, source, fetched_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(barcode) DO UPDATE SET
+            name = excluded.name, brand = excluded.brand, package_size = excluded.package_size,
+            category = excluded.category, image_url = excluded.image_url, calories = excluded.calories,
+            protein_g = excluded.protein_g, carbs_g = excluded.carbs_g, fat_g = excluded.fat_g,
+            fiber_g = excluded.fiber_g, sodium_mg = excluded.sodium_mg, nutri_score = excluded.nutri_score,
+            ingredients_text = excluded.ingredients_text, source = excluded.source, fetched_at = excluded.fetched_at
+    """, (
+        info["barcode"], info["name"] or f"Item {info['barcode']}", info["brand"], info["package_size"],
+        info["category"], info["image_url"], info["calories"], info["protein_g"], info["carbs_g"],
+        info["fat_g"], info["fiber_g"], info["sodium_mg"], info["nutri_score"], info["ingredients_text"],
+        info["source"], datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+    ))
+    conn.commit()
+
+def observed_prices_for_barcode(conn, code: str, product_name: Optional[str]) -> List[Dict[str, Any]]:
+    """
+    Recent reported prices for a scanned item, one entry per store: from
+    observations recorded against this UPC, plus the price cache for the
+    matching catalog product when the name matches one.
+    """
+    cutoff = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=PRICE_OBSERVATION_WINDOW_DAYS)).isoformat(timespec="seconds")
+    rows = conn.execute("""
+        SELECT o.store_id, s.name AS store_name, s.banner, o.price, o.observed_at, o.is_sale
+        FROM price_observations o JOIN stores s ON s.id = o.store_id
+        WHERE o.upc IN (?, ?) AND o.status = 'accepted' AND o.observed_at >= ?
+    """, (code, "0" + code if len(code) == 12 else code, cutoff)).fetchall()
+    by_store: Dict[int, List[Dict[str, Any]]] = {}
+    for r in rows:
+        by_store.setdefault(r["store_id"], []).append(dict(r))
+
+    prices = []
+    for store_id, obs in by_store.items():
+        latest = max(obs, key=lambda o: o["observed_at"])
+        prices.append({
+            "store_id": store_id,
+            "store_name": latest["store_name"],
+            "banner": latest["banner"],
+            "price": round(statistics.median(o["price"] for o in obs), 2),
+            "is_sale": bool(latest["is_sale"]),
+            "observation_count": len(obs),
+            "last_observed_at": latest["observed_at"],
+        })
+
+    matched = match_product_in_catalog(product_name) if product_name else None
+    if matched:
+        seen = {p["store_id"] for p in prices}
+        for r in conn.execute("""
+            SELECT si.store_id, s.name AS store_name, s.banner, si.price, si.observation_count, si.last_observed_at
+            FROM store_inventory si JOIN stores s ON s.id = si.store_id
+            WHERE si.product_id = ?
+        """, (matched["id"],)).fetchall():
+            if r["store_id"] not in seen:
+                prices.append({**dict(r), "is_sale": False})
+
+    prices.sort(key=lambda p: p["price"])
+    for i, p in enumerate(prices):
+        p["is_lowest"] = i == 0
+    return prices
+
 def resolve_barcode_item(barcode: str) -> Dict[str, Any]:
     code_clean = normalize_barcode(barcode)
     if not code_clean:
         raise HTTPException(status_code=400, detail="Invalid barcode format.")
 
     conn = get_connection()
-    c = conn.cursor()
-    # Check both code_clean and 0-padded variant
-    c.execute("SELECT * FROM barcode_products WHERE barcode = ? OR barcode = ?", (code_clean, "0" + code_clean if len(code_clean) == 12 else code_clean))
-    row = c.fetchone()
-
-    if row:
-        p = dict(row)
-        # Option B: Pull real store prices from inventory matching the product name
-        c.execute("""
-            SELECT si.price, s.name as store_name, s.banner
-            FROM store_inventory si
-            JOIN stores s ON s.id = si.store_id
-            JOIN products pr ON pr.id = si.product_id
-            WHERE LOWER(pr.name) LIKE ?
-        """, (f"%{p['name'].lower()[:15]}%",))
-        real_inv = [dict(r) for r in c.fetchall()]
-
-        store_prices = []
-        seen_banners = set()
-        for inv in real_inv:
-            b = inv["banner"]
-            if b not in seen_banners:
-                seen_banners.add(b)
-                store_prices.append({
-                    "banner": b,
-                    "store_name": inv["store_name"],
-                    "price": inv["price"],
-                    "is_sale": False,
-                    "is_lowest": False
-                })
-
-        primary_banner = p["banner"] or "No Frills"
-        if primary_banner not in seen_banners:
-            store_prices.append({
-                "banner": primary_banner,
-                "store_name": f"{primary_banner} Supermarket",
-                "price": p["sale_price"],
-                "is_sale": bool(p["is_on_sale"]),
-                "is_lowest": False
-            })
-        else:
-            for sp in store_prices:
-                if sp["banner"] == primary_banner and p["sale_price"] < sp["price"]:
-                    sp["price"] = p["sale_price"]
-                    sp["is_sale"] = bool(p["is_on_sale"])
-
-        if not store_prices:
-            store_prices = [{
-                "banner": primary_banner,
-                "store_name": f"{primary_banner} Supermarket",
-                "price": p["sale_price"],
-                "is_sale": bool(p["is_on_sale"]),
-                "is_lowest": True
-            }]
-
-        store_prices.sort(key=lambda x: x["price"])
-        min_p = store_prices[0]["price"]
-        for sp in store_prices:
-            sp["is_lowest"] = (sp["price"] == min_p)
-
-        conn.close()
-        reg_p = p["regular_price"] or round(p["sale_price"] * 1.25, 2)
-        sale_p = p["sale_price"]
-        return {
-            "found": True,
-            "barcode": code_clean,
-            "name": p["name"],
-            "brand": p["brand"] or "Canadian Grocer",
-            "package_size": p["package_size"] or "1 unit",
-            "category": p["category"] or "Grocery",
-            "sale_price": sale_p,
-            "regular_price": reg_p,
-            "savings": round(reg_p - sale_p, 2),
-            "savings_percent": round((reg_p - sale_p) / reg_p * 100) if reg_p else 0,
-            "banner": p["banner"] or "No Frills",
-            "best_store": store_prices[0]["banner"],
-            "best_price": store_prices[0]["price"],
-            "is_on_sale": bool(p["is_on_sale"]),
-            "image_url": p["image_url"] or "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop",
-            "nutrition": {
-                "calories": p["calories"] or 150,
-                "protein_g": p["protein_g"] or 4.0,
-                "carbs_g": p["carbs_g"] or 20.0,
-                "fat_g": p["fat_g"] or 3.0,
-                "fiber_g": p["fiber_g"] or 2.0,
-                "sodium_mg": p["sodium_mg"] or 100.0,
-                "nutri_score": p["nutri_score"] or "B",
-                "ingredients": p["ingredients_text"] or "Natural Canadian ingredients."
-            },
-            "store_prices": store_prices
-        }
-
-    # 2. Real-Time Open Food Facts Canada API v2 Lookup (with v0 fallback)
     try:
-        import urllib.request, json, ssl
-        ssl_ctx = ssl._create_unverified_context()
-        off_url = f"https://world.openfoodfacts.org/api/v2/product/{code_clean}.json"
-        req = urllib.request.Request(
-            off_url,
-            headers={"User-Agent": "SmartCart-Canada - Version 2.1 - https://smartcart-9djq.onrender.com"}
-        )
-        with urllib.request.urlopen(req, context=ssl_ctx, timeout=3.5) as resp:
-            off_data = json.loads(resp.read().decode("utf-8"))
-            if off_data.get("status") in [1, "product found"] and off_data.get("product"):
-                prod = off_data["product"]
-                prod_name = prod.get("product_name") or prod.get("product_name_en") or f"Canadian Grocery Item ({code_clean})"
-                brand = prod.get("brands") or "Canadian Grocer"
-                pkg = prod.get("quantity") or "1 unit"
-                img = prod.get("image_front_url") or prod.get("image_url") or "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop"
-                nutri = (prod.get("nutriscore_grade") or "b").upper()
-                nutriments = prod.get("nutriments", {})
-                cals = int(nutriments.get("energy-kcal_100g") or nutriments.get("energy-kcal") or 150)
-                prot = float(nutriments.get("proteins_100g") or nutriments.get("proteins") or 4.0)
-                carbs = float(nutriments.get("carbohydrates_100g") or nutriments.get("carbohydrates") or 20.0)
-                fat = float(nutriments.get("fat_100g") or nutriments.get("fat") or 3.0)
-                fib = float(nutriments.get("fiber_100g") or nutriments.get("fiber") or 2.0)
-                sod = round(float(nutriments.get("sodium_100g") or 0.1) * 1000, 1)
-                ingred = prod.get("ingredients_text") or prod.get("ingredients_text_en") or "Ingredients listed on Canadian package."
+        candidates = (code_clean, "0" + code_clean if len(code_clean) == 12 else code_clean)
+        row = conn.execute("SELECT * FROM barcode_products WHERE barcode = ? OR barcode = ?", candidates).fetchone()
+        info = dict(row) if row else fetch_open_food_facts(code_clean)
+        if info is None:
+            return {
+                "found": False,
+                "barcode": code_clean,
+                "message": f"We couldn't find barcode {code_clean}. You can still add its price from your receipt.",
+            }
+        if row is None:
+            _cache_product_info(conn, info)
 
-                base_val = 3.99 + (abs(hash(code_clean)) % 30) * 0.1
-                sale_p = round(base_val * 0.82, 2)
-                reg_p = round(base_val * 1.18, 2)
-
-                store_prices = [
-                    {"banner": "Canadian Retail Index", "store_name": "Canadian Retail Index", "price": sale_p, "is_sale": False, "is_lowest": True}
-                ]
-
-                try:
-                    c.execute("""
-                        INSERT OR REPLACE INTO barcode_products (
-                            barcode, name, brand, package_size, category, sale_price, regular_price,
-                            banner, is_on_sale, calories, protein_g, carbs_g, fat_g, fiber_g, sodium_mg,
-                            nutri_score, ingredients_text, image_url
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        code_clean, prod_name, brand, pkg, "Grocery", sale_p, reg_p,
-                        "No Frills", 1, cals, prot, carbs, fat, fib, sod, nutri, ingred, img
-                    ))
-                    conn.commit()
-                except Exception:
-                    pass
-
-                conn.close()
-                return {
-                    "found": True,
-                    "barcode": code_clean,
-                    "name": prod_name,
-                    "brand": brand,
-                    "package_size": pkg,
-                    "category": "Grocery",
-                    "sale_price": sale_p,
-                    "regular_price": reg_p,
-                    "savings": round(reg_p - sale_p, 2),
-                    "savings_percent": round((reg_p - sale_p) / reg_p * 100),
-                    "banner": "No Frills",
-                    "best_store": store_prices[0]["banner"],
-                    "best_price": store_prices[0]["price"],
-                    "is_on_sale": True,
-                    "image_url": img,
-                    "nutrition": {
-                        "calories": cals,
-                        "protein_g": prot,
-                        "carbs_g": carbs,
-                        "fat_g": fat,
-                        "fiber_g": fib,
-                        "sodium_mg": sod,
-                        "nutri_score": nutri,
-                        "ingredients": ingred
-                    },
-                    "store_prices": store_prices
-                }
-    except Exception:
-        pass
-
-    # 3. Catalog fallback
-    c.execute("SELECT * FROM products WHERE name LIKE ? OR aliases LIKE ? LIMIT 1", (f"%{code_clean}%", f"%{code_clean}%"))
-    prod_row = c.fetchone()
-    if prod_row:
-        pr = dict(prod_row)
-        sale_p = 3.99
-        reg_p = 5.49
-        store_prices = [
-            {"banner": "No Frills", "price": 3.99, "is_sale": True, "is_lowest": True},
-            {"banner": "Walmart", "price": 4.47, "is_sale": False, "is_lowest": False},
-            {"banner": "Superstore", "price": 4.29, "is_sale": False, "is_lowest": False}
-        ]
-        res = {
-            "found": True,
-            "barcode": code_clean,
-            "name": pr["name"],
-            "brand": pr["brand"] or "Canadian Grocer",
-            "package_size": f"{pr['package_quantity']} {pr['package_unit']}",
-            "category": pr["category"] or "Grocery",
-            "sale_price": sale_p,
-            "regular_price": reg_p,
-            "savings": round(reg_p - sale_p, 2),
-            "savings_percent": round((reg_p - sale_p) / reg_p * 100),
-            "banner": "No Frills",
-            "best_store": "No Frills",
-            "best_price": sale_p,
-            "is_on_sale": True,
-            "image_url": "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop",
-            "nutrition": {
-                "calories": 140, "protein_g": 4.0, "carbs_g": 18.0, "fat_g": 2.0, "fiber_g": 2.0, "sodium_mg": 90.0,
-                "nutri_score": "B", "ingredients": "Natural Canadian grocery ingredients."
-            },
-            "store_prices": store_prices
-        }
-        try:
-            c.execute("""
-                INSERT OR REPLACE INTO barcode_products (
-                    barcode, name, brand, package_size, category, sale_price, regular_price,
-                    banner, is_on_sale, calories, protein_g, carbs_g, fat_g, fiber_g, sodium_mg,
-                    nutri_score, ingredients_text, image_url
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                code_clean, pr["name"], pr["brand"] or "Canadian Grocer", f"{pr['package_quantity']} {pr['package_unit']}",
-                pr["category"] or "Grocery", sale_p, reg_p, "No Frills", 1, 140, 4.0, 18.0, 2.0, 2.0, 90.0,
-                "B", "Natural Canadian grocery ingredients.", res["image_url"]
-            ))
-            conn.commit()
-        except Exception:
-            pass
+        store_prices = observed_prices_for_barcode(conn, code_clean, info.get("name"))
+    finally:
         conn.close()
-        return res
 
-    conn.close()
+    best = store_prices[0] if store_prices else None
     return {
-        "found": False,
+        "found": True,
         "barcode": code_clean,
-        "message": f"Barcode {code_clean} not found in Canadian circular index. Try scanning one of the demo samples!"
+        "name": info.get("name"),
+        "brand": info.get("brand"),
+        "package_size": info.get("package_size"),
+        "category": info.get("category"),
+        "image_url": info.get("image_url"),
+        "best_store": best["banner"] if best else None,
+        "best_price": best["price"] if best else None,
+        "has_prices": bool(store_prices),
+        "nutrition": {
+            "calories": info.get("calories"),
+            "protein_g": info.get("protein_g"),
+            "carbs_g": info.get("carbs_g"),
+            "fat_g": info.get("fat_g"),
+            "fiber_g": info.get("fiber_g"),
+            "sodium_mg": info.get("sodium_mg"),
+            "nutri_score": info.get("nutri_score"),
+            "ingredients": info.get("ingredients_text"),
+            "per": "100g",
+        },
+        "store_prices": store_prices,
+        "attribution": "Product data from Open Food Facts (ODbL)" if info.get("source") == "openfoodfacts" else None,
     }
 
 @app.get("/api/v1/barcodes/resolve/{barcode}")
@@ -604,7 +535,7 @@ def barcode_lookup(barcode: str = Query(..., description="UPC or EAN barcode num
 def get_sample_barcodes():
     conn = get_connection()
     c = conn.cursor()
-    c.execute("SELECT barcode, name, brand, package_size, sale_price, regular_price, banner, is_on_sale FROM barcode_products LIMIT 12")
+    c.execute("SELECT barcode, name, brand, package_size, image_url FROM barcode_products ORDER BY fetched_at DESC LIMIT 12")
     samples = [dict(r) for r in c.fetchall()]
     conn.close()
     return {"samples": samples}
@@ -977,11 +908,10 @@ def get_catalog_flyer_deals(
            f.banner, f.valid_from, f.valid_to,
            COALESCE(d.store_name, f.banner) as store_name,
            COALESCE(d.item_name, d.title) as item_name,
-           COALESCE(d.unit_size, printf('%g %s', p.package_quantity, p.package_unit), '1 unit') as unit_size,
+           d.unit_size,
            COALESCE(d.valid_until, f.valid_to) as valid_until,
            p.name as matched_product_name, p.package_quantity, p.package_unit,
            p.standard_unit_type as std_type,
-           printf('%g %s', p.package_quantity, p.package_unit) as package_size,
            COALESCE(d.original_price, d.sale_price) as price
     FROM flyer_deals d
     JOIN flyers f ON f.id = d.flyer_id
@@ -1009,6 +939,10 @@ def get_catalog_flyer_deals(
     cursor.execute(query, params)
     deals = [dict(row) for row in cursor.fetchall()]
     conn.close()
+    for d in deals:
+        pkg = f"{d['package_quantity']:g} {d['package_unit']}" if d["package_quantity"] is not None else None
+        d["package_size"] = pkg
+        d["unit_size"] = d["unit_size"] or pkg or "1 unit"
     return {"count": len(deals), "deals": deals}
 
 @app.get("/api/flyers/search")

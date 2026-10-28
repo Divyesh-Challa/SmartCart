@@ -17,6 +17,8 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
+from smartcart.barcodes import normalize_barcode
+
 DEFAULT_DB_FILE = "smartcart.db" if os.access(".", os.W_OK) else "/tmp/smartcart.db"
 DB_PATH = Path(os.environ.get("SMARTCART_DB_PATH", DEFAULT_DB_FILE))
 DATA_DIR = Path(__file__).parent / "data"
@@ -48,7 +50,33 @@ def extract_unit_size(text: str) -> str:
             return m.group(1).strip()
     return "1 unit"
 
+def database_url() -> Optional[str]:
+    """Postgres URL when configured; None means the local SQLite file at DB_PATH."""
+    from smartcart.config import get_settings
+
+    url = get_settings().database_url
+    if url and url.startswith(("postgres://", "postgresql://", "postgresql+psycopg://")):
+        return url
+    return None
+
+def is_postgres() -> bool:
+    return database_url() is not None
+
+def sqlalchemy_url() -> str:
+    url = database_url()
+    if url is None:
+        return f"sqlite:///{DB_PATH}"
+    return re.sub(r"^postgres(ql)?(\+psycopg)?://", "postgresql+psycopg://", url)
+
 def get_connection():
+    """
+    Returns a DB-API connection. SQLite connections are plain sqlite3 objects;
+    Postgres connections are wrapped so the same SQL (qmark placeholders,
+    case-insensitive LIKE, cursor.lastrowid) works unchanged.
+    """
+    url = database_url()
+    if url is not None:
+        return PostgresConnection(url)
     conn = sqlite3.connect(str(DB_PATH), timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
@@ -56,284 +84,104 @@ def get_connection():
     conn.execute("PRAGMA foreign_keys=ON;")
     return conn
 
+# Tables whose primary key is not an integer "id" column (no RETURNING id).
+_TABLES_WITHOUT_ID = {"barcode_products", "sync_meta", "users", "alembic_version"}
+_INSERT_TABLE_RE = re.compile(r"^\s*INSERT\s+INTO\s+(\w+)", re.IGNORECASE)
+_LIKE_RE = re.compile(r"\bLIKE\b", re.IGNORECASE)
 
-def init_db():
-    conn = get_connection()
-    cursor = conn.cursor()
+def translate_sql_for_postgres(sql: str) -> str:
+    """Convert SQLite-flavoured SQL to psycopg: ? -> %s, % -> %%, LIKE -> ILIKE."""
+    out = []
+    in_quote = False
+    for ch in sql:
+        if ch == "'":
+            in_quote = not in_quote
+            out.append(ch)
+        elif ch == "%":
+            out.append("%%")
+        elif ch == "?" and not in_quote:
+            out.append("%s")
+        else:
+            out.append(ch)
+    return _LIKE_RE.sub("ILIKE", "".join(out))
 
-    cursor.executescript("""
-    CREATE TABLE IF NOT EXISTS stores (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        banner TEXT NOT NULL,
-        address TEXT NOT NULL,
-        city TEXT DEFAULT 'Edmonton',
-        postal_code TEXT,
-        quadrant TEXT,
-        latitude REAL NOT NULL,
-        longitude REAL NOT NULL,
-        requires_membership INTEGER DEFAULT 0
-    );
+class PostgresCursor:
+    def __init__(self, raw_cursor):
+        self._cur = raw_cursor
+        self.lastrowid: Optional[int] = None
 
-    CREATE TABLE IF NOT EXISTS categories (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL UNIQUE
-    );
+    def execute(self, sql: str, params=()):
+        translated = translate_sql_for_postgres(sql)
+        m = _INSERT_TABLE_RE.match(sql)
+        wants_id = bool(m) and m.group(1).lower() not in _TABLES_WITHOUT_ID and "RETURNING" not in sql.upper()
+        if wants_id:
+            translated = translated.rstrip().rstrip(";") + " RETURNING id"
+        self._cur.execute(translated, tuple(params))
+        if wants_id:
+            row = self._cur.fetchone()
+            self.lastrowid = row["id"] if row else None
+        return self
 
-    CREATE TABLE IF NOT EXISTS products (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        category TEXT NOT NULL,
-        brand TEXT,
-        package_quantity REAL NOT NULL,
-        package_unit TEXT NOT NULL,
-        standard_unit_type TEXT NOT NULL,
-        normalized_amount REAL NOT NULL,
-        aliases TEXT
-    );
+    def executemany(self, sql: str, seq_of_params):
+        self._cur.executemany(translate_sql_for_postgres(sql), [tuple(p) for p in seq_of_params])
+        return self
 
-    CREATE TABLE IF NOT EXISTS store_inventory (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        store_id INTEGER NOT NULL,
-        product_id INTEGER NOT NULL,
-        price REAL NOT NULL,
-        unit_price REAL NOT NULL,
-        in_stock INTEGER DEFAULT 1,
-        confidence_score REAL DEFAULT 0.95,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (store_id) REFERENCES stores(id),
-        FOREIGN KEY (product_id) REFERENCES products(id)
-    );
+    def executescript(self, script: str):
+        for statement in script.split(";"):
+            if statement.strip():
+                self.execute(statement)
+        return self
 
-    CREATE TABLE IF NOT EXISTS flyers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        banner TEXT NOT NULL,
-        title TEXT NOT NULL,
-        total_pages INTEGER DEFAULT 6,
-        valid_from TEXT NOT NULL,
-        valid_to TEXT NOT NULL,
-        badge_text TEXT,
-        color_theme TEXT
-    );
+    def fetchone(self):
+        return self._cur.fetchone()
 
-    CREATE TABLE IF NOT EXISTS flyer_deals (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        flyer_id INTEGER NOT NULL,
-        product_id INTEGER,
-        title TEXT NOT NULL,
-        category TEXT NOT NULL,
-        page_number INTEGER DEFAULT 1,
-        original_price REAL,
-        sale_price REAL NOT NULL,
-        unit_sale_price TEXT,
-        discount_text TEXT,
-        is_front_page INTEGER DEFAULT 0,
-        store_name TEXT,
-        unit_size TEXT,
-        valid_until TEXT,
-        FOREIGN KEY (flyer_id) REFERENCES flyers(id),
-        FOREIGN KEY (product_id) REFERENCES products(id)
-    );
+    def fetchall(self):
+        return self._cur.fetchall()
 
-    -- Schema migration for structured flyer deals
-    PRAGMA table_info(flyer_deals);
+    def __iter__(self):
+        return iter(self._cur.fetchall())
 
+    @property
+    def rowcount(self) -> int:
+        return self._cur.rowcount
 
-    CREATE INDEX IF NOT EXISTS idx_inventory_store ON store_inventory(store_id);
-    CREATE INDEX IF NOT EXISTS idx_inventory_product ON store_inventory(product_id);
-    CREATE INDEX IF NOT EXISTS idx_inventory_prod_store ON store_inventory(product_id, store_id);
-    CREATE INDEX IF NOT EXISTS idx_stores_lat_lon ON stores(latitude, longitude);
-    CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
-    CREATE INDEX IF NOT EXISTS idx_flyer_deals_flyer ON flyer_deals(flyer_id);
-    CREATE INDEX IF NOT EXISTS idx_flyer_deals_page ON flyer_deals(page_number);
-    CREATE TABLE IF NOT EXISTS custom_flyer_pages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        banner TEXT NOT NULL,
-        page_number INTEGER NOT NULL,
-        image_url TEXT NOT NULL,
-        title TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(banner, page_number)
-    );
+class PostgresConnection:
+    def __init__(self, url: str):
+        import psycopg
+        from psycopg.rows import dict_row
 
-    CREATE TABLE IF NOT EXISTS flyer_recipes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        description TEXT NOT NULL,
-        banner TEXT NOT NULL,
-        cuisine TEXT NOT NULL,
-        category TEXT NOT NULL,
-        prep_time_minutes INTEGER NOT NULL,
-        servings INTEGER NOT NULL,
-        difficulty TEXT DEFAULT 'Easy',
-        cost_per_serving REAL NOT NULL,
-        total_sale_cost REAL NOT NULL,
-        total_regular_cost REAL NOT NULL,
-        savings_amount REAL NOT NULL,
-        savings_percent INTEGER NOT NULL,
-        badge_text TEXT,
-        instructions_json TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+        self._conn = psycopg.connect(re.sub(r"^postgresql\+psycopg://", "postgresql://", url), row_factory=dict_row)
 
-    CREATE TABLE IF NOT EXISTS flyer_recipe_ingredients (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        recipe_id INTEGER NOT NULL,
-        name TEXT NOT NULL,
-        brand TEXT,
-        package_size TEXT,
-        category TEXT,
-        sale_price REAL NOT NULL,
-        regular_price REAL NOT NULL,
-        savings REAL NOT NULL,
-        quantity REAL DEFAULT 1.0,
-        unit TEXT DEFAULT 'unit',
-        FOREIGN KEY (recipe_id) REFERENCES flyer_recipes(id)
-    );
+    def cursor(self) -> PostgresCursor:
+        return PostgresCursor(self._conn.cursor())
 
-    CREATE TABLE IF NOT EXISTS recipe_requests (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        dish_name TEXT NOT NULL,
-        cuisine_preference TEXT,
-        dietary_notes TEXT,
-        user_email TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+    def execute(self, sql: str, params=()) -> PostgresCursor:
+        return self.cursor().execute(sql, params)
 
-    CREATE TABLE IF NOT EXISTS barcode_products (
-        barcode TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        brand TEXT,
-        package_size TEXT,
-        category TEXT,
-        sale_price REAL NOT NULL,
-        regular_price REAL NOT NULL,
-        banner TEXT,
-        is_on_sale INTEGER DEFAULT 1,
-        calories INTEGER,
-        protein_g REAL,
-        carbs_g REAL,
-        fat_g REAL,
-        fiber_g REAL,
-        sodium_mg REAL,
-        nutri_score TEXT DEFAULT 'A',
-        ingredients_text TEXT,
-        image_url TEXT
-    );
+    def executemany(self, sql: str, seq_of_params) -> PostgresCursor:
+        return self.cursor().executemany(sql, seq_of_params)
 
-    CREATE TABLE IF NOT EXISTS receipts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        store_name TEXT NOT NULL,
-        trip_date TEXT NOT NULL,
-        amount_spent REAL NOT NULL,
-        regular_amount REAL NOT NULL,
-        amount_saved REAL NOT NULL,
-        savings_percent INTEGER NOT NULL,
-        items_count INTEGER DEFAULT 0,
-        category TEXT DEFAULT 'Groceries',
-        notes TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+    def executescript(self, script: str) -> PostgresCursor:
+        return self.cursor().executescript(script)
 
-    CREATE TABLE IF NOT EXISTS sale_alerts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        product_name TEXT NOT NULL,
-        category TEXT DEFAULT 'Pantry',
-        target_price REAL,
-        current_sale_price REAL,
-        regular_price REAL,
-        banner TEXT,
-        is_on_sale INTEGER DEFAULT 1,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    """)
+    def commit(self) -> None:
+        self._conn.commit()
 
-    cursor.executescript("""
-    CREATE TABLE IF NOT EXISTS price_observations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        store_id INTEGER NOT NULL,
-        product_id INTEGER,
-        upc TEXT,
-        raw_item_name TEXT,
-        price REAL NOT NULL CHECK (price > 0),
-        is_sale INTEGER DEFAULT 0,
-        source TEXT NOT NULL,
-        observed_at TIMESTAMP NOT NULL,
-        submitted_by TEXT,
-        photo_key TEXT,
-        trust_score REAL DEFAULT 0.5,
-        status TEXT DEFAULT 'accepted',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (store_id) REFERENCES stores(id),
-        FOREIGN KEY (product_id) REFERENCES products(id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_price_obs_store_product ON price_observations(store_id, product_id, observed_at);
-    CREATE INDEX IF NOT EXISTS idx_price_obs_upc ON price_observations(upc);
-    """)
+    def rollback(self) -> None:
+        self._conn.rollback()
 
-    _add_missing_columns(cursor, "stores", {
-        "osm_id": "TEXT",
-        "province": "TEXT",
-        "opening_hours": "TEXT",
-        "website": "TEXT",
-        "source": "TEXT",
-        "verified": "INTEGER DEFAULT 0",
-        "data_updated_at": "TEXT",
-    })
-    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_osm_id ON stores(osm_id)")
+    def close(self) -> None:
+        self._conn.close()
 
-    _add_missing_columns(cursor, "store_inventory", {
-        "source": "TEXT",
-        "observation_count": "INTEGER DEFAULT 0",
-        "last_observed_at": "TEXT",
-    })
+def init_db() -> None:
+    """Bring the schema up to date by running Alembic migrations."""
+    from alembic import command
+    from alembic.config import Config
 
-    # Dynamic migration for flyer_deals structured fields
-    cursor.execute("PRAGMA table_info(flyer_deals)")
-    existing_cols = {row["name"] for row in cursor.fetchall()}
-    for col_name in ["store_name", "item_name", "unit_size", "valid_until"]:
-        if col_name not in existing_cols:
-            cursor.execute(f"ALTER TABLE flyer_deals ADD COLUMN {col_name} TEXT")
-    
-    cursor.execute("""
-        UPDATE flyer_deals
-        SET store_name = (SELECT f.banner FROM flyers f WHERE f.id = flyer_deals.flyer_id)
-        WHERE store_name IS NULL
-    """)
-    cursor.execute("""
-        UPDATE flyer_deals
-        SET item_name = COALESCE(item_name, title)
-        WHERE item_name IS NULL
-    """)
-    cursor.execute("""
-        UPDATE flyer_deals
-        SET valid_until = (SELECT f.valid_to FROM flyers f WHERE f.id = flyer_deals.flyer_id)
-        WHERE valid_until IS NULL
-    """)
-    cursor.execute("""
-        UPDATE flyer_deals
-        SET unit_size = (SELECT printf('%g %s', p.package_quantity, p.package_unit) FROM products p WHERE p.id = flyer_deals.product_id)
-        WHERE (unit_size IS NULL OR unit_size = '') AND product_id IS NOT NULL
-    """)
-
-    # Fill unit_size with extracted size from title when available
-    cursor.execute("SELECT id, title, unit_size FROM flyer_deals")
-    for r in cursor.fetchall():
-        ext = extract_unit_size(r["title"])
-        if ext and ext != "1 unit":
-            cursor.execute("UPDATE flyer_deals SET unit_size = ? WHERE id = ?", (ext, r["id"]))
-        elif not r["unit_size"]:
-            cursor.execute("UPDATE flyer_deals SET unit_size = '1 unit' WHERE id = ?", (r["id"],))
-
-    conn.commit()
-    conn.close()
-
-def _add_missing_columns(cursor, table: str, columns: Dict[str, str]) -> None:
-    cursor.execute(f"PRAGMA table_info({table})")
-    existing = {row["name"] for row in cursor.fetchall()}
-    for name, ddl in columns.items():
-        if name not in existing:
-            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+    cfg = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
+    cfg.set_main_option("script_location", str(Path(__file__).parent / "migrations"))
+    cfg.set_main_option("sqlalchemy.url", sqlalchemy_url().replace("%", "%%"))
+    command.upgrade(cfg, "head")
 
 def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 6371.0
@@ -472,6 +320,7 @@ def record_price_observation(
     if product_id is None and not upc:
         raise ValueError("A price observation needs a product_id or a UPC")
     observed_at = observed_at or datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+    upc = normalize_barcode(upc) or None if upc else None
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO price_observations (

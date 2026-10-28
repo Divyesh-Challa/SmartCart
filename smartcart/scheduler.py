@@ -6,7 +6,6 @@ provincial gas prices, and evaluates price drop alerts.
 
 import asyncio
 import datetime
-import sqlite3
 import time
 from typing import Dict, Any
 
@@ -15,31 +14,6 @@ from smartcart.gas_service import fetch_live_edmonton_gas_price
 
 # Default background sync interval: 6 hours (21,600 seconds)
 DEFAULT_SYNC_INTERVAL_SECONDS = 6 * 3600
-
-def init_sync_tables(conn: sqlite3.Connection):
-    cursor = conn.cursor()
-    cursor.executescript("""
-    CREATE TABLE IF NOT EXISTS sync_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        synced_at TEXT NOT NULL,
-        stores_count INTEGER NOT NULL,
-        inventory_rows_count INTEGER NOT NULL,
-        flyer_deals_count INTEGER NOT NULL,
-        gas_price_ab REAL NOT NULL,
-        gas_price_bc REAL NOT NULL,
-        flyer_cycle_label TEXT NOT NULL,
-        status TEXT NOT NULL,
-        details TEXT,
-        next_sync_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS sync_meta (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    """)
-    conn.commit()
 
 def get_current_flyer_cycle() -> Dict[str, Any]:
     """
@@ -68,7 +42,7 @@ def get_current_flyer_cycle() -> Dict[str, Any]:
         "is_reset_day": day_of_week == 3
     }
 
-def evaluate_price_alerts(conn: sqlite3.Connection):
+def evaluate_price_alerts(conn):
     """
     Evaluates active price alerts against current product prices.
     """
@@ -109,7 +83,6 @@ def perform_data_sync() -> Dict[str, Any]:
     """
     start_time = time.time()
     conn = get_connection()
-    init_sync_tables(conn)
     cursor = conn.cursor()
 
     # 1. Total stores count
@@ -160,12 +133,14 @@ def perform_data_sync() -> Dict[str, Any]:
     ))
 
     cursor.execute("""
-        INSERT OR REPLACE INTO sync_meta (key, value, updated_at)
+        INSERT INTO sync_meta (key, value, updated_at)
         VALUES ('last_sync', ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
     """, (now_str,))
     cursor.execute("""
-        INSERT OR REPLACE INTO sync_meta (key, value, updated_at)
+        INSERT INTO sync_meta (key, value, updated_at)
         VALUES ('next_sync', ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
     """, (next_sync_str,))
 
     conn.commit()
@@ -193,7 +168,6 @@ def get_sync_status() -> Dict[str, Any]:
     Returns current sync status and metadata from SQLite.
     """
     conn = get_connection()
-    init_sync_tables(conn)
     cursor = conn.cursor()
 
     cursor.execute("""
