@@ -5,7 +5,7 @@ full multi-page weekly digital flyers, custom flyer uploads, and 3-mode basket o
 Serves the SmartCart Web Companion interface.
 """
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
@@ -16,7 +16,7 @@ import base64
 import re
 import asyncio
 
-from smartcart.database import init_db, seed_edmonton_data, get_connection, haversine_distance_km
+from smartcart.database import bootstrap_database, get_connection, haversine_distance_km
 from smartcart.parser import parse_recipe_text, parse_ingredient_line
 from smartcart.normalizer import match_product_in_catalog, get_product_prices_across_stores, normalize_barcode
 from smartcart.optimizer import BasketOptimizer, DEFAULT_USER_LAT, DEFAULT_USER_LON
@@ -45,8 +45,7 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def startup_event():
-    init_db()
-    seed_edmonton_data()
+    print(f"[SmartCart] Database ready: {bootstrap_database()}")
     try:
         perform_data_sync()
     except Exception as e:
@@ -78,6 +77,16 @@ class GeocodeRequest(BaseModel):
 
 class ComparisonRequest(BaseModel):
     items: List[BasketItemRequest]
+
+def require_admin(x_admin_token: Optional[str]) -> None:
+    """Interim guard for content-management endpoints until user accounts land."""
+    expected = os.environ.get("SMARTCART_ADMIN_TOKEN")
+    if not expected or x_admin_token != expected:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+MAX_FLYER_IMAGE_BYTES = 5 * 1024 * 1024
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+JPEG_MAGIC = b"\xff\xd8\xff"
 
 class UploadFlyerRequest(BaseModel):
     banner: str = Field(..., description="Supermarket chain (e.g. No Frills, Walmart, Superstore)")
@@ -312,39 +321,34 @@ def submit_recipe_request(req: RecipeRequestModel):
 
 @app.get("/api/coverage/stats")
 def get_coverage_stats():
+    """Coverage figures computed from the data actually on file."""
+    conn = get_connection()
+    c = conn.cursor()
+    total = c.execute("SELECT COUNT(*) AS n FROM stores").fetchone()["n"]
+    alberta = c.execute("SELECT COUNT(*) AS n FROM stores WHERE province = 'AB'").fetchone()["n"]
+    banners = c.execute("SELECT banner AS name, COUNT(*) AS count FROM stores GROUP BY banner ORDER BY count DESC").fetchall()
+    provinces = c.execute("""
+        SELECT province AS code, COUNT(*) AS count FROM stores
+        WHERE province IS NOT NULL GROUP BY province ORDER BY count DESC
+    """).fetchall()
+    priced_stores = c.execute("SELECT COUNT(DISTINCT store_id) AS n FROM store_inventory").fetchone()["n"]
+    observations_30d = c.execute(
+        "SELECT COUNT(*) AS n FROM price_observations WHERE observed_at >= datetime('now', '-30 days')"
+    ).fetchone()["n"]
+    recipes = c.execute("SELECT COUNT(*) AS n FROM flyer_recipes").fetchone()["n"]
+    conn.close()
     return {
-        "total_stores_tracked": 3524,
-        "display_stores": "3,500+",
-        "alberta_stores": 267,
-        "edmonton_metro_stores": 26,
-        "banners_count": 35,
-        "new_recipes_per_week": "500+",
-        "provinces": [
-            {"code": "ON", "name": "Ontario", "count": 1420},
-            {"code": "QC", "name": "Quebec", "count": 680},
-            {"code": "AB", "name": "Alberta", "count": 390},
-            {"code": "BC", "name": "British Columbia", "count": 340},
-            {"code": "NS", "name": "Nova Scotia", "count": 180},
-            {"code": "NB", "name": "New Brunswick", "count": 120},
-            {"code": "MB", "name": "Manitoba", "count": 115},
-            {"code": "SK", "name": "Saskatchewan", "count": 95},
-            {"code": "NL", "name": "Newfoundland", "count": 85},
-            {"code": "PE", "name": "Prince Edward Island", "count": 40}
-        ],
-        "retailers": [
-            {"name": "No Frills", "count": 348},
-            {"name": "Walmart", "count": 420},
-            {"name": "Real Canadian Superstore", "count": 160},
-            {"name": "Metro", "count": 340},
-            {"name": "Sobeys", "count": 310},
-            {"name": "FreshCo", "count": 180},
-            {"name": "Safeway", "count": 180},
-            {"name": "Save-On-Foods", "count": 185},
-            {"name": "Costco Wholesale", "count": 115},
-            {"name": "Food Basics", "count": 145},
-            {"name": "Maxi", "count": 170},
-            {"name": "IGA", "count": 280}
-        ]
+        "total_stores_tracked": total,
+        "display_stores": f"{total:,}",
+        "alberta_stores": alberta,
+        "edmonton_metro_stores": alberta,
+        "banners_count": len(banners),
+        "stores_with_prices": priced_stores,
+        "price_observations_30d": observations_30d,
+        "recipes_count": recipes,
+        "provinces": [dict(r) for r in provinces],
+        "retailers": [dict(r) for r in banners[:12]],
+        "attribution": "Store locations © OpenStreetMap contributors (ODbL)",
     }
 
 def resolve_barcode_item(barcode: str) -> Dict[str, Any]:
@@ -1042,22 +1046,33 @@ def get_custom_flyer_pages():
     return {"custom_pages": pages}
 
 @app.post("/api/flyers/upload")
-def upload_custom_flyer_page(req: UploadFlyerRequest):
-    banner_clean = re.sub(r'[^a-zA-Z0-9]', '_', req.banner).lower()
-    filename = f"{banner_clean}_p{req.page_number}.png"
-    upload_dir = Path(__file__).parent / "static" / "uploads" / "flyers"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    target_path = upload_dir / filename
+def upload_custom_flyer_page(req: UploadFlyerRequest, x_admin_token: Optional[str] = Header(None)):
+    require_admin(x_admin_token)
+    if not 1 <= req.page_number <= 50:
+        raise HTTPException(status_code=400, detail="page_number must be between 1 and 50.")
 
     raw_b64 = req.image_base64
     if "," in raw_b64:
         raw_b64 = raw_b64.split(",", 1)[1]
+    if len(raw_b64) > MAX_FLYER_IMAGE_BYTES * 4 // 3 + 4:
+        raise HTTPException(status_code=413, detail="Image exceeds 5 MB limit.")
 
     try:
-        img_bytes = base64.b64decode(raw_b64)
-        target_path.write_bytes(img_bytes)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to decode image: {str(e)}")
+        img_bytes = base64.b64decode(raw_b64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Image is not valid base64.")
+    if img_bytes.startswith(PNG_MAGIC):
+        ext = "png"
+    elif img_bytes.startswith(JPEG_MAGIC):
+        ext = "jpg"
+    else:
+        raise HTTPException(status_code=415, detail="Only PNG and JPEG images are accepted.")
+
+    banner_clean = re.sub(r'[^a-zA-Z0-9]', '_', req.banner).lower()
+    filename = f"{banner_clean}_p{req.page_number}.{ext}"
+    upload_dir = Path(__file__).parent / "static" / "uploads" / "flyers"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    (upload_dir / filename).write_bytes(img_bytes)
 
     image_url = f"/static/uploads/flyers/{filename}"
 
@@ -1082,7 +1097,8 @@ def upload_custom_flyer_page(req: UploadFlyerRequest):
     }
 
 @app.delete("/api/flyers/custom-page")
-def delete_custom_flyer_page(banner: str = Query(...), page_number: int = Query(...)):
+def delete_custom_flyer_page(banner: str = Query(...), page_number: int = Query(...), x_admin_token: Optional[str] = Header(None)):
+    require_admin(x_admin_token)
     conn = get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM custom_flyer_pages WHERE LOWER(banner) = LOWER(?) AND page_number = ?", (banner, page_number))
@@ -1138,7 +1154,14 @@ def optimize_basket(req: OptimizeBasketRequest):
         } if result.get("recovery") else result["error"]
         raise HTTPException(status_code=400, detail=error_detail)
 
-    origin_query = f"{user_postal_code}, Edmonton, AB"
+    if not any(result.get("plans", {}).values()):
+        result["notice"] = {
+            "code": "insufficient_price_data",
+            "message": "We don't have recent prices for these items at stores near you yet. "
+                       "Add prices from your receipts to help build coverage.",
+        }
+
+    origin_query = f"{target_lat},{target_lon}"
 
     # Normalize plan structures to support all frontend conventions
     for plan_key, plan in result.get("plans", {}).items():
@@ -1159,7 +1182,7 @@ def optimize_basket(req: OptimizeBasketRequest):
             standard_stores = []
             for g in plan["store_groups"]:
                 s_meta = g["store"]
-                dest_query = f"{s_meta['name']}, {s_meta['address']}, Edmonton, AB"
+                dest_query = f"{s_meta['latitude']},{s_meta['longitude']}"
                 standard_stores.append({
                     "store_name": s_meta["name"],
                     "chain": s_meta["banner"],
@@ -1172,7 +1195,7 @@ def optimize_basket(req: OptimizeBasketRequest):
                 })
             plan["stores"] = standard_stores
 
-            store_addrs = [f"{st['store_name']}, {st['address']}, Edmonton, AB" for st in standard_stores]
+            store_addrs = [f"{g['store']['latitude']},{g['store']['longitude']}" for g in plan["store_groups"]]
             if len(store_addrs) > 1:
                 plan["full_route_directions_url"] = f"https://www.google.com/maps/dir/?api=1&origin={origin_query}&destination={origin_query}&waypoints={'|'.join(store_addrs)}&travelmode=driving"
             elif len(store_addrs) == 1:
@@ -1182,7 +1205,7 @@ def optimize_basket(req: OptimizeBasketRequest):
 
         elif "store" in plan and plan["store"]:
             s_meta = plan["store"]
-            dest_query = f"{s_meta['name']}, {s_meta['address']}, Edmonton, AB"
+            dest_query = f"{s_meta['latitude']},{s_meta['longitude']}"
             one_store = {
                 "store_name": s_meta["name"],
                 "chain": s_meta["banner"],

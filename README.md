@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![SQLite](https://img.shields.io/badge/Database-SQLite3-003B57.svg?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-v3.4-38B2AC.svg?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![Build & Tests](https://img.shields.io/badge/Tests-21%2F21%20Passing-brightgreen.svg)]()
+[![Build & Tests](https://img.shields.io/badge/Tests-47%2F47%20Passing-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 
 > **Live Deployment:** [https://smartcart-9djq.onrender.com](https://smartcart-9djq.onrender.com)  
@@ -46,8 +46,8 @@ flowchart TD
     end
 
     subgraph StorageLayer["Data & Persistence Layer"]
-        DB[("SQLite Database: 3,524 Geocoded Stores & 84,000+ Products")]
-        FlyerSvc["Weekly Circular Deal Feeds (TTL Cache)"]
+        DB[("SQLite Database: OSM Stores & Crowdsourced Price Observations")]
+        FlyerSvc["Admin-Entered Flyer Deals"]
         GasSvc["Live Provincial Gas Price Benchmarks"]
         OFF["Open Food Facts Canada API"]
     end
@@ -86,30 +86,23 @@ Given:
 | :--- | :--- | :--- |
 | **Plan 1: Maximum Net Saver** | Explores candidate store combinations of size $k \in \{1, 2, 3\}$. Solves exact shortest Hamiltonian path (TSP) for the store subset and computes fuel penalty: $\text{Fuel} = D \times \frac{8.9}{100} \times \text{GasPrice}$. Evaluates net out-of-pocket: $\min \left( \sum \min_{s} P(i, s) + \text{Fuel} \right)$. | Lowest overall out-of-pocket cost. |
 | **Plan 2: Single-Store Run** | Evaluates all single stores $s \in S$. Finds the single location that minimizes $\sum_{i \in B} P(i, s) + \text{Fuel}(2 \times D(\text{Home}, s))$. | Maximum convenience with 1 stop. |
-| **Plan 3: In-Stock Guaranteed** | Filters candidate stores to those with 100% item coverage across all categories, eliminating substitution risk and missing items. | 0% stockout risk. |
+| **Plan 3: Full Basket Coverage** | Filters candidate stores to those with a recent reported price for every item in the basket. | 0% stockout risk. |
 
 ---
 
-## 4. Nationwide Supermarket Network (3,500+ Stores)
+## 4. Data Sources & Coverage (Edmonton Beta)
 
-SmartCart seeds and indexes **3,524 geocoded Canadian grocery stores** across all 10 provinces and 3 territories, complete with realistic inventory matrices:
+SmartCart is in a **closed beta for the Edmonton metro area**. It never shows invented prices: when it has no recent price for an item, it says so.
 
-| Province / Territory | Indexed Stores | Representative Metro Hubs | Major Banners Tracked |
-| :--- | :---: | :--- | :--- |
-| **Ontario** | 1,420 | Toronto, Ottawa, Mississauga, Hamilton, London | No Frills, Metro, Loblaws, Walmart, Food Basics, Farm Boy |
-| **Quebec** | 680 | Montreal, Quebec City, Laval, Gatineau | Super C, Maxi, IGA, Metro, Provigo |
-| **Alberta** | 390 | Calgary, Edmonton, Red Deer, Lethbridge | Real Canadian Superstore, No Frills, Sobeys, Calgary Co-op, Safeway |
-| **British Columbia** | 340 | Vancouver, Surrey, Burnaby, Victoria, Kelowna | Save-On-Foods, No Frills, Superstore, Thrifty Foods, Choices Markets |
-| **Nova Scotia** | 180 | Halifax, Dartmouth, Sydney | Atlantic Superstore, Sobeys, No Frills |
-| **New Brunswick** | 120 | Moncton, Saint John, Fredericton | Atlantic Superstore, Sobeys, Giant Tiger |
-| **Manitoba** | 115 | Winnipeg, Brandon | Real Canadian Superstore, No Frills, Sobeys |
-| **Saskatchewan** | 95 | Saskatoon, Regina | Real Canadian Superstore, Co-op, No Frills |
-| **Newfoundland & Labrador**| 85 | St. John's, Mount Pearl, Corner Brook | Dominion, Sobeys, Coleman's |
-| **Prince Edward Island** | 40 | Charlottetown, Summerside | Atlantic Superstore, Sobeys |
-| **Territories (YT, NT, NU)** | 54 | Whitehorse, Yellowknife, Iqaluit | Northern Store, Independent Grocer |
-| **Total Nationwide** | **3,524** | **All Canadian Markets** | **35+ Supermarket Banners** |
+| Data | Source | Notes |
+| :--- | :--- | :--- |
+| **Store locations** | OpenStreetMap via the Overpass API (`scripts/import_osm_stores.py`) | About 200 supermarkets across Edmonton, St. Albert, Sherwood Park, Spruce Grove, Leduc, Beaumont and Fort Saskatchewan. © OpenStreetMap contributors, [ODbL](https://www.openstreetmap.org/copyright). |
+| **Shelf prices** | Crowdsourced `price_observations` (receipts, in-store checks); later a licensed feed | `store_inventory` is a cache of the median price from the last 30 days, with source, observation count and last-seen date. |
+| **Flyers** | Entered by an admin (licensed feed planned) | Only flyers whose validity window covers today are shown. |
+| **Product nutrition** | Open Food Facts | Looked up by barcode. |
+| **Fuel price** | Edmonton average from cheapgasedmonton.ca, with a provincial benchmark as fallback | Used for the travel-cost part of the optimizer. |
 
----
+To refresh store locations, run `python scripts/import_osm_stores.py`. To load prices you've collected, run `python scripts/import_prices.py prices.csv` (the column format is in the script).
 
 ## 5. Key Engineering Features
 
@@ -140,8 +133,8 @@ SmartCart seeds and indexes **3,524 geocoded Canadian grocery stores** across al
 
 ### 🔄 Automated Store Data Refresh & Background Scheduler
 - **Asynchronous Background Worker:** Executes every 6 hours continuously in the background via `asyncio` in FastAPI.
-- **Thursday Flyer Reset:** Automatically detects weekly Canadian flyer resets (Thursday 12:01 AM) and rotates promotional circular markdowns across all 35 banners.
-- **Dynamic Fuel & Inventory Sync:** Updates live gas price benchmarks and evaluates user price drop alerts against refreshed inventory costs.
+- **Price Cache Rebuild:** Recomputes each store's current prices from the last 30 days of accepted price observations.
+- **Fuel & Alerts:** Refreshes the gas price and checks price drop alerts against the rebuilt prices.
 - **Audit Logging:** Every sync cycle logs stores count, inventory updates, and timestamp metrics into SQLite `sync_history`.
 - **Manual Trigger:** Supports on-demand manual refresh via `POST /api/sync/refresh` and the interactive UI sync modal.
 
@@ -202,7 +195,7 @@ The project includes a comprehensive automated test suite testing unit conversio
 
 ```bash
 # Run all unit tests
-python3 -m unittest discover tests -v
+python3 -m unittest discover -s . -p "test_*.py" -t . -v
 ```
 
 **Test Coverage Highlights:**
@@ -221,7 +214,7 @@ python3 -m unittest discover tests -v
 SmartCart/
 ├── smartcart/
 │   ├── main.py              # FastAPI app, API routing, Open Food Facts integration
-│   ├── database.py          # SQLite schema, nationwide 3,524 store network & inventory
+│   ├── database.py          # SQLite schema, OSM store loader, price observation aggregation
 │   ├── scheduler.py         # Automated background sync worker & weekly flyer scheduler
 │   ├── optimizer.py         # 3-Plan combinatorial route optimizer & fuel math
 │   ├── parser.py            # Natural language recipe parser and ingredient tokenization
@@ -233,7 +226,9 @@ SmartCart/
 │       ├── index.html       # Desktop terminal SPA with slide-over drawer & ZXing scanner
 │       └── manifest.json    # Web app manifest
 ├── tests/
-│   └── test_smartcart.py    # 21 automated unit tests (100% passing)
+│   ├── test_smartcart.py    # API + optimizer tests (synthetic fixture data)
+│   ├── test_real_data.py    # Real-data pipeline tests
+│   └── fixtures/            # Synthetic test-only data (never loaded in the app)
 ├── Dockerfile               # Container deployment configuration
 ├── Procfile                 # Production web process definition
 ├── render.yaml              # Render cloud infrastructure blueprint

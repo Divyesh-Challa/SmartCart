@@ -120,7 +120,7 @@
           </button>
           <button onclick="openSyncModal()" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all border border-white/10 cursor-pointer" title="Store Data Synchronization Status">
             <span class="w-2 h-2 rounded-full bg-sc-emerald animate-pulse"></span>
-            <span id="navSyncBadgeText">3,524 Stores Live</span>
+            <span id="navSyncBadgeText">Edmonton Beta</span>
             <i class="fa-solid fa-arrows-rotate text-[10px] text-sc-emerald ml-0.5"></i>
           </button>
           <button onclick="toggleDarkMode()" class="w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors" title="Toggle Appearance">
@@ -163,7 +163,7 @@
         <!-- Live Status Pill -->
         <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-bold text-white shadow-xl">
           <span class="w-2 h-2 rounded-full bg-sc-emerald animate-pulse"></span>
-          <span>Indexed for Thursday Flyer Resets across 3,524 Canadian Supermarkets</span>
+          <span>Edmonton beta · Real store locations · Prices shared by local shoppers</span>
         </div>
 
         <!-- Headline -->
@@ -176,7 +176,7 @@
 
         <!-- Subtitle -->
         <p class="text-base sm:text-xl text-slate-300 font-normal leading-relaxed max-w-2xl mx-auto">
-          SmartCart analyzes weekly circulars across 35 Canadian chains, generates chef-curated meals under $3 a plate, and solves the multi-store route problem with live fuel pricing.
+          SmartCart compares grocery prices across Edmonton-area stores using prices shared by local shoppers, and plans the cheapest trip once fuel is factored in.
         </p>
 
         <!-- Quick Location Search Bar -->
@@ -218,12 +218,12 @@
         <!-- High-Level Stats Ribbon -->
         <div class="pt-8 grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto">
           <div class="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm text-center">
-            <div class="text-2xl sm:text-3xl font-black text-white">3,500+</div>
-            <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">Supermarkets</div>
+            <div class="text-2xl sm:text-3xl font-black text-white" data-stores-indexed>&nbsp;</div>
+            <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">Edmonton-Area Stores</div>
           </div>
           <div class="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm text-center">
-            <div class="text-2xl sm:text-3xl font-black text-white">35</div>
-            <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">National Banners</div>
+            <div class="text-2xl sm:text-3xl font-black text-white" id="heroPricedStat">&nbsp;</div>
+            <div class="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">Stores With Recent Prices</div>
           </div>
           <div class="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm text-center">
             <div class="text-2xl sm:text-3xl font-black text-sc-emerald" id="heroGasStat">$1.62/L</div>
@@ -675,7 +675,7 @@
         </button>
       </div>
       <p class="text-xs text-sc-muted dark:text-slate-400">
-        SmartCart indexes weekly circulars across 35 Canadian chains every Thursday at 12:01 AM.
+        SmartCart rebuilds store prices from recent shopper-submitted prices every 6 hours. Store locations © OpenStreetMap contributors.
       </p>
       <div class="flex justify-end gap-3 pt-2">
         <button onclick="closeSyncModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-sc-muted hover:text-sc-ink dark:hover:text-white">Close</button>

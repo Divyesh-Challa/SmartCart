@@ -289,9 +289,18 @@ async function loadSyncStatus() {
     const res = await fetch('/api/sync/status');
     const data = await res.json();
     AppState.syncStatus = data;
+    const stores = Number(data.stores_indexed) || 0;
     const badge = document.getElementById('navSyncBadgeText');
-    if (badge) {
-      badge.innerText = `${(data.active_stores_count || 3524).toLocaleString()} Stores Live`;
+    if (badge && stores) {
+      badge.innerText = `Edmonton Beta · ${stores.toLocaleString()} Stores`;
+    }
+    document.querySelectorAll('[data-stores-indexed]').forEach(el => {
+      if (stores) el.innerText = `${stores.toLocaleString()} Stores`;
+    });
+    const priced = document.getElementById('heroPricedStat');
+    if (priced) {
+      const cov = await (await fetch('/api/coverage/stats')).json();
+      priced.innerText = (cov.stores_with_prices || 0).toLocaleString();
     }
   } catch (err) {
     console.warn('Sync status fetch notice:', err);
@@ -318,7 +327,7 @@ async function triggerManualSync() {
   try {
     const res = await fetch('/api/sync/refresh', { method: 'POST' });
     const data = await res.json();
-    showToast(`Refreshed ${data.stores_indexed || 3524} Canadian stores!`);
+    showToast(`Refreshed prices for ${(data.stores_count || 0).toLocaleString()} stores`);
     await loadSyncStatus();
   } catch (err) {
     showToast('Sync initiated in background');
