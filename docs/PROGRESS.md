@@ -13,7 +13,8 @@ The source of truth for resuming work. The full roadmap is in `~/.claude/plans/r
 
 ## Branches
 1. `feat/real-data-foundation`: OSM stores, price observations, fake data moved to tests (pushed)
-2. `feat/backend-hardening` (based on 1): Alembic/Postgres, auth, accounts, prices API, admin, security
+2. `feat/backend-hardening` (based on 1): Alembic/Postgres, auth, accounts, prices API, admin, security, CI
+3. `feat/pwa-frontend` (based on 2): React PWA in `web/`
 
 ## Checklist
 - [x] Phase 1: real data foundation
@@ -26,8 +27,8 @@ The source of truth for resuming work. The full roadmap is in `~/.claude/plans/r
 - [x] Admin: flyer entry, moderation, upload guard; /api/sync/refresh admin-only
 - [x] Security headers, body size limit, CORS, rate limiting, /healthz, logging, Sentry hook, lifespan, standalone worker
 - [x] `.env.example`, Dockerfile hardening (non-root, proxy headers), render.yaml/fly.toml for web + worker (no deploy)
-- [ ] GitHub Actions CI: pytest on SQLite + Postgres service, ruff, web build/test
-- [ ] Ruff lint pass: config + safe autofixes done; ~12 manual findings left (`venv/bin/ruff check .`)
+- [x] GitHub Actions CI: pytest on SQLite + Postgres service, ruff, web build/test
+- [x] Ruff lint pass
 - [ ] Phase 3: React + Vite + TS PWA in `web/` (branch `feat/pwa-frontend`)
   - [ ] Scaffold: Vite, React, TS, Tailwind (compiled), react-router, vite-plugin-pwa, Vitest
   - [ ] API client + Supabase auth client (works disabled when env missing)
@@ -41,3 +42,4 @@ The source of truth for resuming work. The full roadmap is in `~/.claude/plans/r
 ## Log
 - Phase 2 backend work is committed on `feat/backend-hardening`: 71 tests pass on SQLite and Postgres.
 - Deploy configs (.env.example, non-root Dockerfile verified, render.yaml web+worker, scheduler_once) and pyproject/ruff are committed. Next: finish ruff, then CI, then the PWA.
+- Ruff clean; CI workflow pushed. Starting the PWA on `feat/pwa-frontend`.
