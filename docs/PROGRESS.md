@@ -29,17 +29,18 @@ The source of truth for resuming work. The full roadmap is in `~/.claude/plans/r
 - [x] `.env.example`, Dockerfile hardening (non-root, proxy headers), render.yaml/fly.toml for web + worker (no deploy)
 - [x] GitHub Actions CI: pytest on SQLite + Postgres service, ruff, web build/test
 - [x] Ruff lint pass
-- [ ] Phase 3: React + Vite + TS PWA in `web/` (branch `feat/pwa-frontend`)
-  - [ ] Scaffold: Vite, React, TS, Tailwind (compiled), react-router, vite-plugin-pwa, Vitest
-  - [ ] API client + Supabase auth client (works disabled when env missing)
-  - [ ] Screens: onboarding/location, list, compare, plan (optimizer), add price, scan, flyers, account, legal pages
-  - [ ] EN strings in an i18n dictionary (FR later), WCAG basics, empty/error states, freshness labels
-  - [ ] Tests (Vitest) and a production build
-- [ ] Phase 5: draft privacy policy, terms and pricing disclaimer in `docs/legal/` (DRAFT, needs lawyer)
-- [ ] ADRs in `docs/adr/` for the key decisions
+- [x] Phase 3: React + Vite + TS PWA in `web/` (branch `feat/pwa-frontend`)
+  - [x] Scaffold: Vite, React, TS, Tailwind (compiled), react-router, vite-plugin-pwa, Vitest
+  - [x] API client + Supabase auth client (works disabled when env missing)
+  - [x] Screens: onboarding/location, list, compare, plan (optimizer), add price, scan, flyers, account, legal pages
+  - [x] EN strings in an i18n dictionary (FR later), WCAG basics, empty/error states, freshness labels
+  - [x] Tests (Vitest) and a production build
+- [x] Phase 5: draft privacy policy, terms and pricing disclaimer in `docs/legal/` (DRAFT, needs lawyer)
+- [x] ADRs in `docs/adr/` for the key decisions
 - [ ] README update; final summary + tomorrow's setup checklist in this file
 
 ## Log
 - Phase 2 backend work is committed on `feat/backend-hardening`: 71 tests pass on SQLite and Postgres.
 - Deploy configs (.env.example, non-root Dockerfile verified, render.yaml web+worker, scheduler_once) and pyproject/ruff are committed. Next: finish ruff, then CI, then the PWA.
 - Ruff clean; CI workflow pushed. Starting the PWA on `feat/pwa-frontend`.
+- Compare endpoint fixed (freshness; no invented stores/brands/dates). PWA built in `web/`: 9 screens, 13 Vitest tests, 108 KB gzipped build, smoke-tested against the local API. Legal drafts in `web/src/legal/` (see docs/legal/README.md). ADRs 0001–0006 written. Remaining: README + final summary.
