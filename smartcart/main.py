@@ -5,16 +5,18 @@ full multi-page weekly digital flyers, custom flyer uploads, and 3-mode basket o
 Serves the SmartCart Web Companion interface.
 """
 
-from fastapi import FastAPI, HTTPException, Query, Header
+from contextlib import asynccontextmanager
+
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import asyncio
-import base64
 import datetime
-import os
+import logging
 import re
 import statistics
 
@@ -45,21 +47,69 @@ from smartcart.scheduler import (
     get_current_flyer_cycle
 )
 from smartcart.meal_generator import generate_flyer_grounded_meal_plan
+from smartcart.auth import CurrentUser, get_optional_user, require_admin_user
+from smartcart.config import get_settings
+from smartcart.observability import configure_observability
+from smartcart.routers import account, admin, personal, prices
+from smartcart.security import MaxBodySizeMiddleware, SecurityHeadersMiddleware, limiter
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
+log = logging.getLogger("smartcart")
+settings = get_settings()
+configure_observability(settings)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    log.info("Database ready: %s", bootstrap_database())
+    worker = None
+    if settings.run_scheduler:
+        try:
+            perform_data_sync()
+        except Exception:
+            log.exception("Initial sync failed")
+        worker = asyncio.create_task(background_sync_worker())
+    yield
+    if worker is not None:
+        worker.cancel()
+
 
 app = FastAPI(
     title="SmartCart API",
-    description="AI-powered smart grocery intelligence, weekly digital flyers & multi-store basket optimizer",
-    version="1.4.0"
+    description="Grocery price comparison and multi-store trip planning for Edmonton, built on prices shared by shoppers.",
+    version="0.2.0",
+    lifespan=lifespan,
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(MaxBodySizeMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "X-Admin-Token"],
+)
+app.include_router(prices.router)
+app.include_router(personal.router)
+app.include_router(account.router)
+app.include_router(admin.router)
 
-@app.on_event("startup")
-async def startup_event():
-    print(f"[SmartCart] Database ready: {bootstrap_database()}")
+
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    conn = get_connection()
     try:
-        perform_data_sync()
-    except Exception as e:
-        print(f"[SmartCart] Initial sync notice: {e}")
-    asyncio.create_task(background_sync_worker())
+        conn.execute("SELECT 1").fetchone()
+    finally:
+        conn.close()
+    return {"status": "ok"}
 
 class ParseRecipeRequest(BaseModel):
     recipe_text: Optional[str] = Field(None, description="Unstructured recipe or natural language grocery list text")
@@ -87,42 +137,11 @@ class GeocodeRequest(BaseModel):
 class ComparisonRequest(BaseModel):
     items: List[BasketItemRequest]
 
-def require_admin(x_admin_token: Optional[str]) -> None:
-    """Interim guard for content-management endpoints until user accounts land."""
-    expected = os.environ.get("SMARTCART_ADMIN_TOKEN")
-    if not expected or x_admin_token != expected:
-        raise HTTPException(status_code=403, detail="Admin access required.")
-
-MAX_FLYER_IMAGE_BYTES = 5 * 1024 * 1024
-PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
-JPEG_MAGIC = b"\xff\xd8\xff"
-
-class UploadFlyerRequest(BaseModel):
-    banner: str = Field(..., description="Supermarket chain (e.g. No Frills, Walmart, Superstore)")
-    page_number: int = Field(1, description="Page number 1 through 6")
-    image_base64: str = Field(..., description="Base64 or Data URL of the flyer page image")
-    title: Optional[str] = Field(None, description="Optional title for the flyer page")
-
-
 class RecipeRequestModel(BaseModel):
     dish_name: str = Field(..., description="Recipe or ingredient requested")
     cuisine_preference: Optional[str] = Field(None, description="Cuisine or dietary goal")
     dietary_notes: Optional[str] = Field(None, description="Additional notes")
     user_email: Optional[str] = Field(None, description="User email")
-
-class ReceiptCreateModel(BaseModel):
-    store_name: str = Field(..., description="Grocery chain or store name")
-    trip_date: str = Field(..., description="YYYY-MM-DD format date")
-    amount_spent: float = Field(..., description="Actual paid amount in CAD")
-    regular_amount: float = Field(..., description="Regular shelf price amount in CAD")
-    category: Optional[str] = Field("Groceries", description="Primary shopping category")
-    items_count: Optional[int] = Field(0, description="Number of items purchased")
-    notes: Optional[str] = Field("", description="Trip notes or purchased items summary")
-
-class AlertCreateModel(BaseModel):
-    product_name: str = Field(..., description="Product to watch for flyer sales")
-    category: Optional[str] = Field("Pantry", description="Department/category")
-    target_price: Optional[float] = Field(None, description="Target notification price in CAD")
 
 @app.get("/api/recipes/dinner-deals")
 def get_dinner_deals(
@@ -317,13 +336,14 @@ def generate_meal_plan_endpoint(req: MealPlanRequestModel):
     )
 
 @app.post("/api/recipes/request")
-def submit_recipe_request(req: RecipeRequestModel):
+def submit_recipe_request(req: RecipeRequestModel, user: Optional[CurrentUser] = Depends(get_optional_user)):
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
-        INSERT INTO recipe_requests (dish_name, cuisine_preference, dietary_notes, user_email)
-        VALUES (?, ?, ?, ?)
-    """, (req.dish_name, req.cuisine_preference, req.dietary_notes, req.user_email))
+        INSERT INTO recipe_requests (user_id, dish_name, cuisine_preference, dietary_notes, user_email)
+        VALUES (?, ?, ?, ?, ?)
+    """, (user.id if user else None, req.dish_name, req.cuisine_preference, req.dietary_notes,
+          req.user_email or (user.email if user else None)))
     conn.commit()
     conn.close()
     return {"status": "ok", "message": "Recipe request submitted successfully!"}
@@ -539,133 +559,6 @@ def get_sample_barcodes():
     samples = [dict(r) for r in c.fetchall()]
     conn.close()
     return {"samples": samples}
-
-@app.get("/api/savings/summary")
-def get_savings_summary():
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("""
-        SELECT 
-            COUNT(*) as trips_count,
-            COALESCE(SUM(amount_spent), 0) as total_spent,
-            COALESCE(SUM(regular_amount), 0) as total_regular,
-            COALESCE(SUM(amount_saved), 0) as total_saved
-        FROM receipts
-    """)
-    row = c.fetchone()
-    trips_count = row["trips_count"]
-    total_spent = round(row["total_spent"], 2)
-    total_regular = round(row["total_regular"], 2)
-    total_saved = round(row["total_saved"], 2)
-    savings_percent = round((total_saved / total_regular * 100), 1) if total_regular > 0 else 0.0
-
-    c.execute("""
-        SELECT category, SUM(amount_saved) as saved, SUM(amount_spent) as spent
-        FROM receipts
-        GROUP BY category
-        ORDER BY saved DESC
-    """)
-    categories = []
-    for r in c.fetchall():
-        cat_saved = round(r["saved"], 2)
-        cat_spent = round(r["spent"], 2)
-        categories.append({
-            "category": r["category"],
-            "saved": cat_saved,
-            "spent": cat_spent,
-            "share_percent": round(cat_saved / total_saved * 100, 1) if total_saved > 0 else 0
-        })
-    conn.close()
-    return {
-        "trips_count": trips_count,
-        "total_spent": total_spent,
-        "total_regular": total_regular,
-        "total_saved": total_saved,
-        "savings_percent": savings_percent,
-        "avg_savings_per_trip": round(total_saved / trips_count, 2) if trips_count > 0 else 0.0,
-        "categories": categories
-    }
-
-@app.get("/api/savings/receipts")
-def get_savings_receipts():
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM receipts ORDER BY trip_date DESC, id DESC")
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
-    return {"receipts": rows}
-
-@app.post("/api/savings/receipts")
-def create_receipt(receipt: ReceiptCreateModel):
-    spent = round(receipt.amount_spent, 2)
-    regular = round(receipt.regular_amount, 2)
-    saved = round(max(0.0, regular - spent), 2)
-    pct = round((saved / regular * 100)) if regular > 0 else 0
-    
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("""
-        INSERT INTO receipts (store_name, trip_date, amount_spent, regular_amount, amount_saved, savings_percent, items_count, category, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (receipt.store_name, receipt.trip_date, spent, regular, saved, pct, receipt.items_count, receipt.category or "Groceries", receipt.notes or ""))
-    conn.commit()
-    new_id = c.lastrowid
-    conn.close()
-    return {"status": "ok", "id": new_id, "amount_saved": saved, "savings_percent": pct}
-
-@app.delete("/api/savings/receipts/{receipt_id}")
-def delete_receipt(receipt_id: int):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("DELETE FROM receipts WHERE id = ?", (receipt_id,))
-    conn.commit()
-    conn.close()
-    return {"status": "ok", "deleted": True}
-
-@app.get("/api/alerts")
-def get_alerts():
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM sale_alerts ORDER BY is_on_sale DESC, id DESC")
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
-    return {"alerts": rows}
-
-@app.post("/api/alerts")
-def create_alert(alert: AlertCreateModel):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("""
-        SELECT d.sale_price, d.original_price, f.banner
-        FROM flyer_deals d
-        JOIN flyers f ON f.id = d.flyer_id
-        WHERE LOWER(d.title) LIKE ?
-        ORDER BY d.sale_price ASC LIMIT 1
-    """, (f"%{alert.product_name.lower().strip()}%",))
-    deal_row = c.fetchone()
-    
-    is_on_sale = 1 if deal_row else 0
-    curr_price = deal_row["sale_price"] if deal_row else None
-    reg_price = deal_row["original_price"] if deal_row else None
-    banner = deal_row["banner"] if deal_row else "Any Store"
-
-    c.execute("""
-        INSERT INTO sale_alerts (product_name, category, target_price, current_sale_price, regular_price, banner, is_on_sale)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (alert.product_name, alert.category or "Pantry", alert.target_price, curr_price, reg_price, banner, is_on_sale))
-    conn.commit()
-    alert_id = c.lastrowid
-    conn.close()
-    return {"status": "ok", "id": alert_id, "is_on_sale": bool(is_on_sale)}
-
-@app.delete("/api/alerts/{alert_id}")
-def delete_alert(alert_id: int):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("DELETE FROM sale_alerts WHERE id = ?", (alert_id,))
-    conn.commit()
-    conn.close()
-    return {"status": "ok", "deleted": True}
 
 @app.get("/api/deals/top-ticker")
 def get_top_deals_ticker():
@@ -978,67 +871,6 @@ def get_custom_flyer_pages():
     pages = [dict(r) for r in c.fetchall()]
     conn.close()
     return {"custom_pages": pages}
-
-@app.post("/api/flyers/upload")
-def upload_custom_flyer_page(req: UploadFlyerRequest, x_admin_token: Optional[str] = Header(None)):
-    require_admin(x_admin_token)
-    if not 1 <= req.page_number <= 50:
-        raise HTTPException(status_code=400, detail="page_number must be between 1 and 50.")
-
-    raw_b64 = req.image_base64
-    if "," in raw_b64:
-        raw_b64 = raw_b64.split(",", 1)[1]
-    if len(raw_b64) > MAX_FLYER_IMAGE_BYTES * 4 // 3 + 4:
-        raise HTTPException(status_code=413, detail="Image exceeds 5 MB limit.")
-
-    try:
-        img_bytes = base64.b64decode(raw_b64, validate=True)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Image is not valid base64.")
-    if img_bytes.startswith(PNG_MAGIC):
-        ext = "png"
-    elif img_bytes.startswith(JPEG_MAGIC):
-        ext = "jpg"
-    else:
-        raise HTTPException(status_code=415, detail="Only PNG and JPEG images are accepted.")
-
-    banner_clean = re.sub(r'[^a-zA-Z0-9]', '_', req.banner).lower()
-    filename = f"{banner_clean}_p{req.page_number}.{ext}"
-    upload_dir = Path(__file__).parent / "static" / "uploads" / "flyers"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    (upload_dir / filename).write_bytes(img_bytes)
-
-    image_url = f"/static/uploads/flyers/{filename}"
-
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("""
-        INSERT INTO custom_flyer_pages (banner, page_number, image_url, title)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(banner, page_number) DO UPDATE SET
-            image_url = excluded.image_url,
-            title = excluded.title,
-            created_at = CURRENT_TIMESTAMP
-    """, (req.banner, req.page_number, image_url, req.title or f"{req.banner} Page {req.page_number}"))
-    conn.commit()
-    conn.close()
-
-    return {
-        "status": "ok",
-        "banner": req.banner,
-        "page_number": req.page_number,
-        "image_url": image_url
-    }
-
-@app.delete("/api/flyers/custom-page")
-def delete_custom_flyer_page(banner: str = Query(...), page_number: int = Query(...), x_admin_token: Optional[str] = Header(None)):
-    require_admin(x_admin_token)
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("DELETE FROM custom_flyer_pages WHERE LOWER(banner) = LOWER(?) AND page_number = ?", (banner, page_number))
-    conn.commit()
-    conn.close()
-    return {"status": "ok", "deleted": True}
 
 @app.get("/api/gas-price")
 def get_gas_price_endpoint():
@@ -1440,11 +1272,8 @@ def sync_status_endpoint():
     return get_sync_status()
 
 @app.post("/api/sync/refresh")
-def sync_refresh_endpoint():
-    """
-    Triggers an on-demand update of stores, weekly flyer promotions,
-    inventory prices, and live provincial fuel benchmarks.
-    """
+def sync_refresh_endpoint(admin_user: Optional[CurrentUser] = Depends(require_admin_user)):
+    """Admin: rebuild store prices from observations and refresh fuel prices now."""
     return perform_data_sync()
 
 @app.get("/api/sync/history")

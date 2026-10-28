@@ -334,38 +334,52 @@ def record_price_observation(
     conn.commit()
     return cursor.lastrowid
 
-def refresh_inventory_from_observations(conn, window_days: int = PRICE_OBSERVATION_WINDOW_DAYS) -> int:
+def refresh_inventory_from_observations(
+    conn,
+    window_days: int = PRICE_OBSERVATION_WINDOW_DAYS,
+    store_id: Optional[int] = None,
+    product_id: Optional[int] = None,
+) -> int:
     """
     Rebuild the store_inventory price cache from accepted observations within
     the window: one row per (store, product) at the median observed price.
     Store/product pairs with no recent observations get no row, so the
     optimizer treats them as unknown rather than guessing.
+
+    Pass store_id and product_id to rebuild just that one pair.
     """
     cutoff = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=window_days)).isoformat(timespec="seconds")
+    pair_filter, pair_params = "", ()
+    if store_id is not None and product_id is not None:
+        pair_filter, pair_params = " AND o.store_id = ? AND o.product_id = ?", (store_id, product_id)
+
     cursor = conn.cursor()
     cursor.execute("""
         SELECT o.store_id, o.product_id, o.price, o.observed_at, o.source, p.normalized_amount
         FROM price_observations o
         JOIN products p ON p.id = o.product_id
         WHERE o.status = 'accepted' AND o.product_id IS NOT NULL AND o.observed_at >= ?
-    """, (cutoff,))
+    """ + pair_filter, (cutoff,) + pair_params)
 
     grouped: Dict[tuple, List[Dict[str, Any]]] = {}
     for row in cursor.fetchall():
         grouped.setdefault((row["store_id"], row["product_id"]), []).append(dict(row))
 
     rows = []
-    for (store_id, product_id), obs in grouped.items():
+    for (s_id, p_id), obs in grouped.items():
         price = round(statistics.median(o["price"] for o in obs), 2)
         latest = max(obs, key=lambda o: o["observed_at"])
         sources = {o["source"] for o in obs}
         confidence = round(min(0.95, 0.5 + 0.1 * len(obs)), 2)
         rows.append((
-            store_id, product_id, price, round(price / latest["normalized_amount"], 4), 1,
+            s_id, p_id, price, round(price / latest["normalized_amount"], 4), 1,
             confidence, ",".join(sorted(sources)), len(obs), latest["observed_at"],
         ))
 
-    cursor.execute("DELETE FROM store_inventory")
+    if pair_params:
+        cursor.execute("DELETE FROM store_inventory WHERE store_id = ? AND product_id = ?", pair_params)
+    else:
+        cursor.execute("DELETE FROM store_inventory")
     cursor.executemany("""
         INSERT INTO store_inventory (
             store_id, product_id, price, unit_price, in_stock,

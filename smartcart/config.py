@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     supabase_jwt_secret: Optional[str] = None
     supabase_jwt_audience: str = "authenticated"
 
+    # Optional: lets account deletion also remove the Supabase auth user.
+    supabase_service_role_key: Optional[str] = None
+
     # Interim content-management guard (flyer uploads) until admin roles exist.
     admin_token: Optional[str] = None
 
@@ -38,6 +41,7 @@ class Settings(BaseSettings):
     # run `python -m smartcart.worker` as a separate process instead.
     run_scheduler: bool = True
 
+    rate_limit_enabled: bool = True
     rate_limit_default: str = "120/minute"
     rate_limit_price_submissions: str = "60/hour"
     max_request_bytes: int = 8 * 1024 * 1024

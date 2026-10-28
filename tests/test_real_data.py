@@ -14,7 +14,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("SMARTCART_DB_PATH", os.path.join(tempfile.mkdtemp(prefix="smartcart-test-"), "test.db"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi.testclient import TestClient
@@ -22,6 +21,7 @@ from fastapi.testclient import TestClient
 import smartcart.database as database
 from smartcart import flyers_service
 from smartcart.main import app
+from tests.auth_utils import auth_headers
 from tests.db_utils import reset_database
 
 
@@ -251,27 +251,23 @@ class TestFlyerUploadGuard(RealDataTestCase):
 
     def test_upload_requires_admin_token(self):
         body = {"banner": "Test Banner", "page_number": 1, "image_base64": self.PNG}
-        with mock.patch.dict(os.environ, {"SMARTCART_ADMIN_TOKEN": "s3cret"}):
-            self.assertEqual(self.client.post("/api/flyers/upload", json=body).status_code, 403)
-            bad = self.client.post("/api/flyers/upload", json=body, headers={"X-Admin-Token": "nope"})
-            self.assertEqual(bad.status_code, 403)
-            ok = self.client.post("/api/flyers/upload", json=body, headers={"X-Admin-Token": "s3cret"})
-            self.assertEqual(ok.status_code, 200, ok.text)
-            self.assertTrue(ok.json()["image_url"].endswith(".png"))
+        self.assertEqual(self.client.post("/api/flyers/upload", json=body).status_code, 403)
+        bad = self.client.post("/api/flyers/upload", json=body, headers={"X-Admin-Token": "nope"})
+        self.assertEqual(bad.status_code, 403)
+        ok = self.client.post("/api/flyers/upload", json=body, headers={"X-Admin-Token": "test-admin-token"})
+        self.assertEqual(ok.status_code, 200, ok.text)
+        self.assertTrue(ok.json()["image_url"].endswith(".png"))
 
-    def test_upload_disabled_when_no_token_configured(self):
+    def test_regular_users_cannot_upload(self):
         body = {"banner": "Test Banner", "page_number": 1, "image_base64": self.PNG}
-        with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("SMARTCART_ADMIN_TOKEN", None)
-            res = self.client.post("/api/flyers/upload", json=body, headers={"X-Admin-Token": ""})
-            self.assertEqual(res.status_code, 403)
+        res = self.client.post("/api/flyers/upload", json=body, headers=auth_headers("regular-user"))
+        self.assertEqual(res.status_code, 403)
 
     def test_upload_rejects_non_images(self):
         body = {"banner": "Test Banner", "page_number": 1,
                 "image_base64": base64.b64encode(b"<script>alert(1)</script>").decode()}
-        with mock.patch.dict(os.environ, {"SMARTCART_ADMIN_TOKEN": "s3cret"}):
-            res = self.client.post("/api/flyers/upload", json=body, headers={"X-Admin-Token": "s3cret"})
-            self.assertEqual(res.status_code, 415)
+        res = self.client.post("/api/flyers/upload", json=body, headers={"X-Admin-Token": "test-admin-token"})
+        self.assertEqual(res.status_code, 415)
 
 
 if __name__ == "__main__":

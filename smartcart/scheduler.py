@@ -6,11 +6,14 @@ provincial gas prices, and evaluates price drop alerts.
 
 import asyncio
 import datetime
+import logging
 import time
 from typing import Dict, Any
 
 from smartcart.database import get_connection, refresh_inventory_from_observations
 from smartcart.gas_service import fetch_live_edmonton_gas_price
+
+log = logging.getLogger(__name__)
 
 # Default background sync interval: 6 hours (21,600 seconds)
 DEFAULT_SYNC_INTERVAL_SECONDS = 6 * 3600
@@ -71,7 +74,7 @@ def evaluate_price_alerts(conn):
                 """, (min_price, is_on_sale, a["id"]))
         conn.commit()
     except Exception as e:
-        print(f"Price alert evaluation notice: {e}")
+        log.warning("Price alert evaluation failed: %s", e)
 
 def perform_data_sync() -> Dict[str, Any]:
     """
@@ -212,13 +215,12 @@ async def background_sync_worker(interval_seconds: int = DEFAULT_SYNC_INTERVAL_S
     Perpetual background async task running within the FastAPI event loop.
     Ensures Canadian grocery data is regularly updated every 6 hours and on flyer reset.
     """
-    print(f"[SmartCart Scheduler] Background store data sync worker initialized (Interval: {interval_seconds}s)")
+    log.info("Background sync worker started (interval %ss)", interval_seconds)
     while True:
         try:
-            print("[SmartCart Scheduler] Executing scheduled Canadian grocery data sync...")
             result = perform_data_sync()
-            print(f"[SmartCart Scheduler] Sync completed successfully: {result['stores_count']} stores, {result['inventory_prices_rebuilt']} prices rebuilt")
+            log.info("Sync completed: %s stores, %s prices rebuilt", result['stores_count'], result['inventory_prices_rebuilt'])
         except Exception as e:
-            print(f"[SmartCart Scheduler] Sync error during scheduled run: {e}")
+            log.exception("Scheduled sync failed: %s", e)
         
         await asyncio.sleep(interval_seconds)
