@@ -50,18 +50,23 @@ jobs:
   web:
     name: Web app build and tests
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('web/package.json') != '' }}
     defaults:
       run:
         working-directory: web
     steps:
       - uses: actions/checkout@v4
+      # Branches without the web app skip these steps.
       - uses: actions/setup-node@v4
+        if: hashFiles('web/package.json') != ''
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - run: npm ci
-      - run: npm run lint --if-present
-      - run: npm test
-      - run: npm run build
+      - if: hashFiles('web/package.json') != ''
+        run: npm ci
+      - if: hashFiles('web/package.json') != ''
+        run: npm run lint --if-present
+      - if: hashFiles('web/package.json') != ''
+        run: npm test
+      - if: hashFiles('web/package.json') != ''
+        run: npm run build
