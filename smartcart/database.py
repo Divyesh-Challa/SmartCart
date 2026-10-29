@@ -86,7 +86,7 @@ def get_connection():
     return conn
 
 # Tables whose primary key is not an integer "id" column (no RETURNING id).
-_TABLES_WITHOUT_ID = {"barcode_products", "sync_meta", "users", "alembic_version"}
+_TABLES_WITHOUT_ID = {"barcode_products", "sync_meta", "users", "shopping_lists", "alembic_version"}
 _INSERT_TABLE_RE = re.compile(r"^\s*INSERT\s+INTO\s+(\w+)", re.IGNORECASE)
 _LIKE_RE = re.compile(r"\bLIKE\b", re.IGNORECASE)
 

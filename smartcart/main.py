@@ -51,7 +51,7 @@ from smartcart.meal_generator import generate_flyer_grounded_meal_plan
 from smartcart.auth import CurrentUser, get_optional_user, require_admin_user
 from smartcart.config import get_settings
 from smartcart.observability import configure_observability
-from smartcart.routers import account, admin, personal, prices
+from smartcart.routers import account, admin, personal, prices, shopping_list
 from smartcart.security import MaxBodySizeMiddleware, SecurityHeadersMiddleware, limiter
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -95,13 +95,14 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "X-Admin-Token"],
 )
 app.include_router(prices.router)
 app.include_router(personal.router)
 app.include_router(account.router)
 app.include_router(admin.router)
+app.include_router(shopping_list.router)
 
 
 @app.get("/healthz", include_in_schema=False)

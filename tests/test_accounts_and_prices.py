@@ -146,6 +146,29 @@ class TestAccount(ApiTestCase):
         self.assertEqual(len(self.client.get(f"/api/stores/{self.store_id}/prices").json()["prices"]), 1)
 
 
+class TestShoppingList(ApiTestCase):
+    def test_list_round_trip_is_private_and_deleted_with_account(self):
+        alice, bob = auth_headers("alice"), auth_headers("bob")
+        self.assertEqual(self.client.get("/api/me/list", headers=alice).json(), {"items": [], "updated_at": None})
+        items = [{"id": "a1", "name": "Salted butter", "quantity": 2}, {"id": "a2", "name": "Eggs", "quantity": 1}]
+        saved = self.client.put("/api/me/list", json={"items": items}, headers=alice)
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(self.client.get("/api/me/list", headers=alice).json()["items"], items)
+        self.assertEqual(self.client.get("/api/me/list", headers=bob).json()["items"], [])
+        self.assertEqual(self.client.get("/api/me/export", headers=alice).json()["shopping_lists"][0]["user_id"], "alice")
+
+        self.client.delete("/api/me", headers=alice)
+        self.assertEqual(self.client.get("/api/me/list", headers=alice).json()["items"], [])
+
+    def test_list_validation(self):
+        h = auth_headers("carol")
+        self.assertEqual(self.client.get("/api/me/list").status_code, 401)
+        too_many = [{"id": str(i), "name": "x", "quantity": 1} for i in range(201)]
+        self.assertEqual(self.client.put("/api/me/list", json={"items": too_many}, headers=h).status_code, 422)
+        bad_qty = [{"id": "1", "name": "milk", "quantity": 0}]
+        self.assertEqual(self.client.put("/api/me/list", json={"items": bad_qty}, headers=h).status_code, 422)
+
+
 class TestOwnerAdmin(ApiTestCase):
     def test_allowlisted_email_becomes_admin_with_full_access(self):
         me = self.client.get("/api/me", headers=auth_headers("owner-id", email="Owner@Example.com")).json()

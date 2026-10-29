@@ -18,7 +18,7 @@ from smartcart.database import get_connection, refresh_inventory_from_observatio
 router = APIRouter(prefix="/api/me", tags=["account"])
 log = logging.getLogger(__name__)
 
-OWNED_TABLES = ("receipts", "sale_alerts", "recipe_requests")
+OWNED_TABLES = ("receipts", "sale_alerts", "recipe_requests", "shopping_lists")
 
 
 class ProfileUpdate(BaseModel):

@@ -29,6 +29,12 @@ export const en = {
     remove: (name: string) => `Remove ${name}`,
     plan: "Find the cheapest trip",
     clear: "Clear list",
+    sync: {
+      local: "Saved on this device. Sign in to keep it on all your devices.",
+      syncing: "Saving to your account…",
+      synced: "Saved to your account.",
+      error: "Couldn't reach your account. Your list is still saved on this device.",
+    },
   },
   plan: {
     title: "Your trip plans",
