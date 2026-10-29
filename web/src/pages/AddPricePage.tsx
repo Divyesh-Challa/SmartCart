@@ -5,6 +5,7 @@ import { useAuth } from "../lib/auth";
 import { loadLocation } from "../lib/storage";
 import { t } from "../i18n/en";
 import { Button, Card, Notice, PageTitle, TextInput } from "../components/ui";
+import ReceiptReader from "../components/ReceiptReader";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -125,6 +126,7 @@ export default function AddPricePage() {
         </form>
         {message && <div className="mt-3"><Notice tone={message.tone}>{message.text}</Notice></div>}
       </Card>
+      <ReceiptReader storeId={storeId} date={date} />
     </>
   );
 }
