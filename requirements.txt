@@ -4,6 +4,7 @@ starlette==1.10.0
 uvicorn[standard]==0.54.0
 pydantic==2.14.1
 pydantic-settings==2.16.1
+certifi==2026.10.23
 httpx==0.28.1
 psycopg[binary]==3.3.6
 psycopg-pool==3.3.3

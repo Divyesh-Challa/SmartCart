@@ -9,10 +9,12 @@ SMARTCART_SUPABASE_JWT_SECRET for the latter.
 """
 
 import datetime
+import ssl
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Optional
 
+import certifi
 import jwt
 from fastapi import Depends, Header, HTTPException, Request
 
@@ -41,7 +43,9 @@ def auth_configured() -> bool:
 
 @lru_cache
 def _jwks_client(jwks_url: str) -> jwt.PyJWKClient:
-    return jwt.PyJWKClient(jwks_url, cache_keys=True, lifespan=3600)
+    # certifi's CA bundle: some Python builds (e.g. python.org on macOS) ship without system CAs.
+    return jwt.PyJWKClient(jwks_url, cache_keys=True, lifespan=3600,
+                           ssl_context=ssl.create_default_context(cafile=certifi.where()))
 
 
 def decode_access_token(token: str) -> dict:

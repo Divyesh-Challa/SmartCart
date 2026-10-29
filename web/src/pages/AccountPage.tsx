@@ -72,7 +72,12 @@ function ProfilePanel() {
     setStatus(t.account.deleted);
   }
 
-  if (!profile) return status ? <Notice tone="error">{status}</Notice> : null;
+  if (!profile) return status ? (
+    <div className="space-y-3">
+      <Notice tone="error">{status}</Notice>
+      <Button variant="secondary" onClick={() => supabase!.auth.signOut()}>{t.account.signOut}</Button>
+    </div>
+  ) : null;
 
   return (
     <>
