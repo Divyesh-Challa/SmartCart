@@ -53,9 +53,12 @@ function PlanCard({ planKeys, plan }: { planKeys: string[]; plan: Plan }) {
             </div>
             <ul className="mt-2 space-y-1 text-sm">
               {st.items.map((it) => (
-                <li key={it.requested} className="flex justify-between">
+                <li key={it.requested} className="flex justify-between gap-2">
                   <span>
                     {it.packages} × {it.item_name}
+                    {it.reported_at && !it.on_sale && (
+                      <span className="block text-xs text-slate-500">{t.plan.reportedAt(it.reported_at)}</span>
+                    )}
                     {it.on_sale && (
                       <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
                         {t.plan.onSale(it.sale_ends ?? "")}

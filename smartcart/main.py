@@ -27,6 +27,7 @@ from smartcart.database import (
     PRICE_OBSERVATION_WINDOW_DAYS,
     bootstrap_database,
     close_pools,
+    chain_reference_prices,
     get_connection,
     haversine_distance_km,
 )
@@ -49,7 +50,7 @@ from smartcart.scheduler import (
 )
 from smartcart.meal_generator import generate_flyer_grounded_meal_plan
 from smartcart.auth import CurrentUser, get_optional_user, require_admin_user
-from smartcart.config import get_settings
+from smartcart.config import get_settings, local_today
 from smartcart.observability import configure_observability
 from smartcart.routers import account, admin, personal, prices, shopping_list
 from smartcart.security import MaxBodySizeMiddleware, SecurityHeadersMiddleware, limiter
@@ -1124,12 +1125,15 @@ def multi_store_price_comparison(
         """)
         products = [dict(r) for r in c.fetchall()]
 
-    # 4. Fetch active flyer deals for cross-referencing
+    # 4. Fetch this week's flyer deals (valid today) for cross-referencing
+    today = local_today().isoformat()
     c.execute("""
-        SELECT d.id, d.title, d.product_id, d.sale_price, d.original_price, d.discount_text, d.valid_until, d.store_name, f.banner
+        SELECT d.id, d.title, d.product_id, d.sale_price, d.original_price, d.discount_text,
+               COALESCE(d.valid_until, f.valid_to) AS valid_until, d.store_name, f.banner
         FROM flyer_deals d
         JOIN flyers f ON f.id = d.flyer_id
-    """)
+        WHERE f.valid_from <= ? AND f.valid_to >= ?
+    """, (today, today))
     all_deals = [dict(d) for d in c.fetchall()]
 
     grouped_results = []
@@ -1163,6 +1167,27 @@ def multi_store_price_comparison(
             if b not in banner_stores or inv["price"] < banner_stores[b]["price"]:
                 banner_stores[b] = inv
 
+        # Chains with nearby stores but no report of their own: use the chain's
+        # latest report elsewhere, at the nearest of its stores, labelled with
+        # where it was actually seen.
+        for ref_banner, ref in chain_reference_prices(conn, p_id).items():
+            local = [s for s in nearby_stores if (s["banner"] or "").strip().lower() == ref_banner]
+            if not local or any(b.strip().lower() == ref_banner for b in banner_stores):
+                continue
+            nearest = min(local, key=lambda s: s["distance_km"])
+            banner_stores[nearest["banner"]] = {
+                "store_id": nearest["id"],
+                "store_name": nearest["name"],
+                "address": nearest["address"],
+                "city": nearest.get("city") or target_city,
+                "distance_km": nearest["distance_km"],
+                "banner": nearest["banner"],
+                "price": ref["price"],
+                "observation_count": ref["observation_count"],
+                "last_observed_at": ref["last_observed_at"],
+                "reported_at": ref["reported_at"],
+            }
+
         # Include flyer deals, but only at a real nearby store of that chain.
         for b, deal in deal_for_prod.items():
             if b not in banner_stores and deal.get("sale_price"):
@@ -1189,9 +1214,11 @@ def multi_store_price_comparison(
         for b, st in banner_stores.items():
             price = st["price"]
             deal = deal_for_prod.get(b)
-            if deal and deal["sale_price"] < price:
+            if deal and deal["sale_price"] <= price:
                 price = deal["sale_price"]
                 st["price"] = price
+            else:
+                deal = None  # a flyer that isn't cheaper than the reported price isn't a sale here
 
             if pkg_unit in ["g"] and pkg_qty > 0:
                 unit_price_val = price / (pkg_qty / 100.0)
@@ -1235,6 +1262,7 @@ def multi_store_price_comparison(
                 } if deal else None,
                 "observation_count": st.get("observation_count", 0),
                 "last_observed_at": st.get("last_observed_at"),
+                "reported_at": st.get("reported_at"),
             })
 
         stores_list.sort(key=lambda x: (x["price"], x.get("distance_km") or 999))

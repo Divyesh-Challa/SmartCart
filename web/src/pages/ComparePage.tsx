@@ -60,7 +60,9 @@ export default function ComparePage() {
                     {st.distance_km != null && `${st.distance_km} km · `}
                     {st.flyer_deal
                       ? `${t.compare.flyer}${st.flyer_deal.discount_text ? `: ${st.flyer_deal.discount_text}` : ""}`
-                      : `${t.compare.reports(st.observation_count)} · ${formatFreshness(st.last_observed_at)}`}
+                      : st.reported_at
+                        ? `${t.compare.reportedAt(st.reported_at)} · ${formatFreshness(st.last_observed_at)}`
+                        : `${t.compare.reports(st.observation_count)} · ${formatFreshness(st.last_observed_at)}`}
                   </p>
                 </div>
                 <div className="text-right">

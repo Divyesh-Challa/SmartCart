@@ -47,6 +47,7 @@ export const en = {
     total: "Total",
     stops: (n: number) => `${n} ${n === 1 ? "stop" : "stops"}`,
     directions: "Directions",
+    reportedAt: (store: string) => `Price seen at ${store}`,
     onSale: (until: string) => (until ? `Flyer price to ${until}` : "Flyer price"),
     unmatched: (items: string) => `We couldn't match: ${items}`,
     planNames: {
@@ -69,6 +70,7 @@ export const en = {
     none: "No recent prices for that item near you yet.",
     lowest: "Lowest",
     reports: (n: number) => `${n} ${n === 1 ? "report" : "reports"}`,
+    reportedAt: (store: string) => `Price reported at ${store}`,
     flyer: "Flyer deal",
   },
   addPrice: {

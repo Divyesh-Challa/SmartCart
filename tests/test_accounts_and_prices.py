@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from smartcart.config import local_today
 from smartcart import database
 from smartcart.main import app
+from smartcart.optimizer import BasketOptimizer
 from smartcart.security import limiter
 from tests.auth_utils import auth_headers, make_token
 from tests.test_real_data import RealDataTestCase
@@ -272,6 +273,51 @@ class TestCompareHonesty(ApiTestCase):
         entry = next(st for st in butter["stores"] if st["store_id"] == self.store_id)
         self.assertEqual(entry["observation_count"], 1)
         self.assertIsNotNone(entry["last_observed_at"])
+
+    def nofrills(self):
+        return [r["id"] for r in self.conn.execute(
+            "SELECT id FROM stores WHERE banner = 'No Frills' ORDER BY id").fetchall()]
+
+    def test_chain_price_fills_other_stores_with_where_it_was_seen(self):
+        reported, other = self.nofrills()[:2]
+        self.assertEqual(self.submit(auth_headers("chain-user"), store_id=reported, price=5.29).status_code, 201)
+        reported_name = self.conn.execute("SELECT name FROM stores WHERE id = ?", (reported,)).fetchone()["name"]
+
+        basket = BasketOptimizer().prepare_basket_data([{"name": "salted butter", "quantity": 1}],
+                                                       [{"id": other, "banner": "No Frills"}])
+        filled = basket["items"][0]["prices"][other]
+        self.assertEqual(filled["price"], 5.29)
+        self.assertEqual(filled["in_stock"], 0)  # not confirmed at this store
+        self.assertTrue(filled["reported_at"].startswith(reported_name))
+
+    def test_store_own_report_beats_chain_price(self):
+        a, b = self.nofrills()[:2]
+        h = auth_headers("chain-user-2")
+        self.submit(h, store_id=a, price=4.00)
+        self.submit(h, store_id=b, price=6.00)
+        price = BasketOptimizer().prepare_basket_data([{"name": "salted butter"}],
+                                                      [{"id": b, "banner": "No Frills"}])["items"][0]["prices"][b]
+        self.assertEqual(price["price"], 6.00)
+        self.assertIsNone(price.get("reported_at"))
+
+    def test_expired_flyers_and_dearer_deals_are_not_sales(self):
+        self.submit(auth_headers("cmp-2"), price=3.49)
+        banner = self.conn.execute("SELECT banner FROM stores WHERE id = ?", (self.store_id,)).fetchone()["banner"]
+        # A deal pricier than the reported price isn't shown as a sale.
+        self.client.post("/api/admin/flyers", headers=ADMIN, json={
+            "banner": banner, "title": "Flyer", "valid_from": self.today, "valid_to": self.today,
+            "deals": [{"title": "Salted Butter 454g", "category": "Dairy", "sale_price": 3.99}],
+        })
+        # An expired flyer is ignored even though it's cheaper.
+        self.conn.execute("INSERT INTO flyers (banner, title, valid_from, valid_to) VALUES (?, 'Old', '2020-01-01', '2020-01-07')", (banner,))
+        old_id = self.conn.execute("SELECT MAX(id) AS id FROM flyers").fetchone()["id"]
+        self.conn.execute("INSERT INTO flyer_deals (flyer_id, product_id, title, category, sale_price) VALUES (?, ?, 'Salted Butter', 'Dairy', 0.99)",
+                          (old_id, self.butter))
+        self.conn.commit()
+        data = self.client.get("/api/v1/search/compare?q=butter&postal_code=T6E2A1").json()["data"]
+        entry = next(st for st in next(d for d in data if d["product_id"] == self.butter)["stores"] if st["banner"] == banner)
+        self.assertEqual(entry["price"], 3.49)
+        self.assertFalse(entry["is_on_sale"])
 
 
 class TestHttpHardening(ApiTestCase):

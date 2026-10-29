@@ -373,6 +373,40 @@ def record_price_observation(
     conn.commit()
     return cursor.lastrowid
 
+def store_label(name: str, address: Optional[str]) -> str:
+    return f"{name}, {address}" if address else name
+
+
+def chain_reference_prices(conn, product_id: int) -> Dict[str, Dict[str, Any]]:
+    """
+    For each chain, the most recently reported price for a product at any of its
+    stores, and where it was reported. Big chains mostly price the same across a
+    city, so this stands in at the chain's stores that have no report of their
+    own, always labelled with where it was actually seen.
+    """
+    rows = conn.execute("""
+        SELECT si.price, si.unit_price, si.observation_count, si.last_observed_at,
+               s.id AS store_id, s.name, s.address, s.banner
+        FROM store_inventory si JOIN stores s ON s.id = si.store_id
+        WHERE si.product_id = ? AND s.banner IS NOT NULL
+    """, (product_id,)).fetchall()
+    best: Dict[str, Dict[str, Any]] = {}
+    for r in rows:
+        key = r["banner"].strip().lower()
+        current = best.get(key)
+        rank = (r["last_observed_at"] or "", r["observation_count"] or 0)
+        if current is None or rank > (current["last_observed_at"] or "", current["observation_count"] or 0):
+            best[key] = {
+                "price": r["price"],
+                "unit_price": r["unit_price"],
+                "observation_count": r["observation_count"],
+                "last_observed_at": r["last_observed_at"],
+                "store_id": r["store_id"],
+                "reported_at": store_label(r["name"], r["address"]),
+            }
+    return best
+
+
 def refresh_inventory_from_observations(
     conn,
     window_days: int = PRICE_OBSERVATION_WINDOW_DAYS,

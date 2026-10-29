@@ -14,7 +14,7 @@ import math
 import time
 from itertools import combinations, permutations
 from smartcart.config import local_today
-from smartcart.database import get_connection, haversine_distance_km
+from smartcart.database import chain_reference_prices, get_connection, haversine_distance_km
 from smartcart.normalizer import match_product_in_catalog, compute_packages_needed
 
 DEFAULT_USER_LAT = 53.5461
@@ -27,6 +27,29 @@ DEFAULT_GAS_COST_PER_KM = round((DEFAULT_FUEL_EFFICIENCY_L_100KM / 100.0) * DEFA
 def estimate_drive_minutes(round_trip_km: float) -> int:
     """City driving at about 30 km/h (2 min per km), and never under 4 minutes."""
     return max(4, round(round_trip_km * 2.0))
+
+
+def apply_chain_prices(conn, product_id: int, candidate_stores: List[Dict[str, Any]],
+                       prices: Dict[int, Dict[str, Any]]) -> None:
+    """
+    Fill stores with no report of their own from the same chain's latest report
+    elsewhere. These count as not confirmed at that store (in_stock 0), so the
+    full-coverage plan still only uses prices seen at the store itself.
+    """
+    chains = chain_reference_prices(conn, product_id)
+    for store in candidate_stores:
+        if store["id"] in prices:
+            continue
+        ref = chains.get((store.get("banner") or "").strip().lower())
+        if ref:
+            prices[store["id"]] = {
+                "store_id": store["id"],
+                "price": ref["price"],
+                "unit_price": ref["unit_price"],
+                "in_stock": 0,
+                "reported_at": ref["reported_at"],
+                "last_observed_at": ref["last_observed_at"],
+            }
 
 
 def apply_flyer_deals(cursor, product_id: int, candidate_stores: List[Dict[str, Any]],
@@ -187,6 +210,7 @@ class BasketOptimizer:
                 """
                 cursor.execute(sql, [prod["id"]] + store_ids)
                 prices = {row["store_id"]: dict(row) for row in cursor.fetchall()}
+                apply_chain_prices(conn, prod["id"], candidate_stores, prices)
                 apply_flyer_deals(cursor, prod["id"], candidate_stores, prices)
             else:
                 prices = {}
@@ -253,6 +277,7 @@ class BasketOptimizer:
                     "in_stock": bool(p_info.get("in_stock", 1)),
                     "on_sale": bool(p_info.get("on_sale")),
                     "sale_ends": p_info.get("sale_ends"),
+                    "reported_at": p_info.get("reported_at"),
                     "store_id": store_id,
                     "store_name": store["name"],
                     "banner": store["banner"],
@@ -401,6 +426,7 @@ class BasketOptimizer:
                         "in_stock": bool(p_info.get("in_stock", 1)),
                         "on_sale": bool(p_info.get("on_sale")),
                         "sale_ends": p_info.get("sale_ends"),
+                        "reported_at": p_info.get("reported_at"),
                         "store_id": s_id,
                         "store_name": s_meta["name"],
                         "banner": s_meta["banner"],
