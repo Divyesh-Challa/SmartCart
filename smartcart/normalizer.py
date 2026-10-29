@@ -89,15 +89,20 @@ CONFLICTING_MODIFIERS = {
     "chicken": {"broth", "bouillon", "noodle", "soup"},
     "beef": {"broth", "bouillon", "jerky"},
     "onions": {"crispy", "rings"},
-    "cheese": {"cream", "cottage"}
+    "cheese": {"cream", "cottage"},
+    "milk": {"chocolate", "almond", "oat", "soy", "coconut"},
 }
+
+PACKAGE_SIZE_RE = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:kg|g|lb|lbs|oz|l|ml|pk|pack|ct|dr|x)\b")
 
 def match_product_in_catalog(query: str, preferred_category: Optional[str] = None) -> Optional[Dict[str, Any]]:
     if not query:
         return None
 
     products = get_cached_products()
-    query_clean = query.strip().lower()
+    # Package sizes ("454G", "1.54L", "12PK") say nothing about which product it is,
+    # and their digits would otherwise match names like "1% milk".
+    query_clean = " ".join(PACKAGE_SIZE_RE.sub(" ", query.lower()).split()) or query.strip().lower()
     query_tokens = tokenize(query_clean)
     if not query_tokens:
         return None

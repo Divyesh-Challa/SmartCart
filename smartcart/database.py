@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from smartcart.barcodes import normalize_barcode
+from smartcart.catalog import PRODUCT_CATALOG
 
 DEFAULT_DB_FILE = "smartcart.db" if os.access(".", os.W_OK) else os.path.join(tempfile.gettempdir(), "smartcart.db")
 DB_PATH = Path(os.environ.get("SMARTCART_DB_PATH", DEFAULT_DB_FILE))
@@ -233,44 +234,18 @@ def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) ->
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return round(R * c, 2)
 
-# Generic catalog of staple products the basket optimizer can match against.
-# These are product definitions only; prices come from price_observations.
-PRODUCT_CATALOG = [
-    ("Boneless Skinless Chicken Breasts", "Meat", "Generic", 1.0, "kg", "weight_100g", 10.0, "chicken breast, chicken breasts, chicken cutlets"),
-    ("Boneless Skinless Chicken Thighs", "Meat", "Generic", 1.0, "kg", "weight_100g", 10.0, "chicken thighs, chicken thigh, chicken"),
-    ("Lean Ground Beef", "Meat", "Generic", 1.0, "kg", "weight_100g", 10.0, "ground beef, minced beef, beef"),
-    ("Fresh Atlantic Salmon Fillets", "Seafood", "Generic", 500.0, "g", "weight_100g", 5.0, "salmon, salmon fillet, fish"),
-    ("2% Partly Skimmed Milk", "Dairy", "Dairyland", 4.0, "L", "volume_100ml", 40.0, "milk, 2% milk, cow milk"),
-    ("Large Grade A White Eggs (12-pack)", "Dairy", "Generic", 12.0, "unit", "unit", 12.0, "eggs, egg, large eggs, dozen eggs"),
-    ("Large Grade A White Eggs (30-pack)", "Dairy", "Generic", 30.0, "unit", "unit", 30.0, "eggs, egg, flat eggs, 30 eggs"),
-    ("Salted Butter", "Dairy", "Generic", 454.0, "g", "weight_100g", 4.54, "butter, salted butter, baking butter"),
-    ("Greek Yogurt Plain 0%", "Dairy", "Oikos", 750.0, "g", "weight_100g", 7.5, "greek yogurt, yogurt, plain yogurt"),
-    ("Cheddar Cheese Block", "Dairy", "Kraft / Black Diamond", 400.0, "g", "weight_100g", 4.0, "cheddar cheese, cheese, cheese block"),
-    ("Heavy Whipping Cream 33%", "Dairy", "Dairyland", 500.0, "ml", "volume_100ml", 5.0, "heavy cream, whipping cream, 35% cream"),
-    ("Bananas", "Produce", "Cavendish", 1.0, "kg", "weight_100g", 10.0, "banana, bananas, fresh bananas"),
-    ("Avocados (Bag of 5)", "Produce", "Generic", 5.0, "unit", "unit", 5.0, "avocado, avocados, ripe avos, avo"),
-    ("Pineapple", "Produce", "Del Monte", 1.0, "unit", "unit", 1.0, "pineapple, pineapples, fresh pineapple"),
-    ("Yellow Onions (3 lb bag)", "Produce", "Generic", 1.36, "kg", "weight_100g", 13.6, "onions, onion, yellow onion"),
-    ("Baby Spinach", "Produce", "Organic Girl", 312.0, "g", "weight_100g", 3.12, "spinach, baby spinach, greens"),
-    ("Garlic (3 pack)", "Produce", "Generic", 3.0, "unit", "unit", 3.0, "garlic, fresh garlic, garlic cloves"),
-    ("Canned Crushed Tomatoes", "Pantry", "Unico", 796.0, "ml", "volume_100ml", 7.96, "canned tomatoes, crushed tomatoes, diced tomatoes, tomato sauce"),
-    ("Garam Masala", "Pantry", "Suraj", 100.0, "g", "weight_100g", 1.0, "garam masala, curry powder, indian spices"),
-    ("Long Grain Basmati Rice", "Pantry", "Tilda / Royal", 4.54, "kg", "weight_100g", 45.4, "basmati rice, rice, white rice"),
-    ("Pasta Sauce (Marinara)", "Pantry", "Classico", 650.0, "ml", "volume_100ml", 6.5, "pasta sauce, marinara, spaghetti sauce"),
-    ("Dry Spaghetti", "Pantry", "Barilla", 900.0, "g", "weight_100g", 9.0, "spaghetti, pasta, noodles"),
-    ("White Sliced Sandwich Bread", "Bakery", "Wonder / D'Italiano", 675.0, "g", "weight_100g", 6.75, "bread, sliced bread, sandwich bread"),
-    ("Extra Virgin Olive Oil", "Pantry", "Bertolli", 1.0, "L", "volume_100ml", 10.0, "olive oil, evoo, cooking oil"),
-]
 
-def seed_product_catalog(conn) -> None:
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) as count FROM products")
-    if cursor.fetchone()["count"] == 0:
-        cursor.executemany("""
+def seed_product_catalog(conn) -> int:
+    """Adds catalog products the database doesn't have yet (matched by name). Returns how many were added."""
+    existing = {r["name"] for r in conn.execute("SELECT name FROM products").fetchall()}
+    missing = [row for row in PRODUCT_CATALOG if row[0] not in existing]
+    if missing:
+        conn.cursor().executemany("""
         INSERT INTO products (name, category, brand, package_quantity, package_unit, standard_unit_type, normalized_amount, aliases)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, PRODUCT_CATALOG)
+        """, missing)
     conn.commit()
+    return len(missing)
 
 def load_real_stores(conn, region: str = DEFAULT_REGION) -> int:
     """
