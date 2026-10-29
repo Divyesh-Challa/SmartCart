@@ -2,6 +2,9 @@
 
 The source of truth for resuming work. The full roadmap is in `~/.claude/plans/rustling-jingling-gray.md`.
 
+## Live
+Beta: https://smartcart-app-ivx8.onrender.com (Render service `smartcart-app`, free plan, Virginia; deployed from `feat/beta-completion` on 2026-10-28). Redeploy with `venv/bin/python scripts/render_deploy.py --branch <branch> --yes` (the owner runs it).
+
 ## Working copy
 Work happens in `~/Developer/SmartCart`. The old copy in `~/Documents/Projects/SmartCart` sits in iCloud Drive with "Optimize Storage" on, which made file reads time out; it is behind and shouldn't be used.
 
@@ -26,11 +29,12 @@ Work happens in `~/Developer/SmartCart`. The old copy in `~/Documents/Projects/S
 - Prices: submission with validation, outlier review, daily cap and rate limit; admin review queue; receipt photos read on the phone (Tesseract.js) and submitted after review.
 - Flyers: admin entry checked against known chains; active flyer prices used in trip plans with a "Flyer price" badge.
 - Security: JWT verification (JWKS), RLS on every table, rate limits, body limit (incl. chunked), security headers, CSP on web pages.
-- Tests: 81 API tests (SQLite and Postgres), 20 web unit tests, 6 Playwright browser tests (mobile), all in CI.
+- Catalog: 153 everyday products; a chain's latest report fills its other stores, labelled with where it was seen.
+- Tests: 88 API tests (SQLite and Postgres), 20 web unit tests, 6 Playwright browser tests (mobile), all in CI.
 
 ## Waiting on the owner
-1. **Render API key** in `.env` as `RENDER_API_KEY`, then confirm the deploy. Run `venv/bin/python scripts/render_deploy.py --branch feat/beta-completion` for a dry run first.
-2. **Revoke the Supabase access token** once the deploy is done (it appeared in a transcript). The deploy script uses it to add the live address to Supabase's sign-in settings, so revoke it after.
+1. **Rotate the Render API key and revoke the Supabase access token** (both appeared in a transcript). Put a new Render key in `.env` only when redeploying.
+2. **Fill prices:** enter this week's flyers for the six big chains (Admin screen) and scan receipts.
 3. **Legal:** fill the placeholders in `web/src/legal/*.md` and get a lawyer's review before public launch.
 4. **Name and trademark check** for "SmartCart", plus a domain.
 5. **Email for magic links:** Supabase's built-in email is limited to a few messages an hour. Before inviting testers, add an SMTP provider (e.g. Resend free tier) in Supabase Auth settings.
