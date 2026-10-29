@@ -2,20 +2,21 @@
 SmartCart FastAPI Server
 Provides REST API endpoints for recipe parsing, SKU lookup, postal code geocoding,
 full multi-page weekly digital flyers, custom flyer uploads, and 3-mode basket optimization.
-Serves the SmartCart Web Companion interface.
+Also serves the SmartCart web app (the PWA built from web/).
 """
 
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import asyncio
 import datetime
+import json
 import logging
 import re
 import statistics
@@ -1302,56 +1303,34 @@ def sync_history_endpoint(limit: int = 10):
     conn.close()
     return {"history": rows}
 
-STATIC_DIR = Path(__file__).parent / "static"
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+UPLOADS_DIR = Path(__file__).parent / "static" / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
-@app.get("/", response_class=HTMLResponse)
-def serve_ui():
-    index_file = STATIC_DIR / "index.html"
-    if index_file.exists():
-        return FileResponse(str(index_file))
-    return "<h1>SmartCart API is running. Web companion UI not found.</h1>"
+# The React PWA (web/), built by `npm run build`. In the Docker image it is copied
+# to /app/web/dist; SMARTCART_WEB_DIST overrides the location.
+WEB_DIST = Path(settings.web_dist or Path(__file__).resolve().parent.parent / "web" / "dist")
 
-@app.get("/compare", response_class=HTMLResponse)
-def serve_compare_page():
-    f = STATIC_DIR / "compare.html"
-    if f.exists():
-        return FileResponse(str(f))
-    return RedirectResponse(url="/")
 
-@app.get("/flyers", response_class=HTMLResponse)
-def serve_flyers_page():
-    f = STATIC_DIR / "flyers.html"
-    if f.exists():
-        return FileResponse(str(f))
-    return RedirectResponse(url="/")
+@app.get("/config.js", include_in_schema=False)
+def public_config():
+    """Public runtime settings for the web app (no secrets: the anon key is designed to be public)."""
+    config = {"supabaseUrl": settings.supabase_url, "supabaseAnonKey": settings.supabase_anon_key}
+    return Response(f"window.__SMARTCART_CONFIG__ = {json.dumps(config)};",
+                    media_type="application/javascript", headers={"Cache-Control": "no-cache"})
 
-@app.get("/meals", response_class=HTMLResponse)
-@app.get("/recipes", response_class=HTMLResponse)
-def serve_meals_page():
-    f = STATIC_DIR / "meals.html"
-    if f.exists():
-        return FileResponse(str(f))
-    return RedirectResponse(url="/")
 
-@app.get("/optimizer", response_class=HTMLResponse)
-def serve_optimizer_page():
-    f = STATIC_DIR / "optimizer.html"
-    if f.exists():
-        return FileResponse(str(f))
-    return RedirectResponse(url="/")
-
-@app.get("/scanner", response_class=HTMLResponse)
-def serve_scanner_page():
-    f = STATIC_DIR / "scanner.html"
-    if f.exists():
-        return FileResponse(str(f))
-    return RedirectResponse(url="/")
-
-@app.get("/savings", response_class=HTMLResponse)
-def serve_savings_page():
-    f = STATIC_DIR / "savings.html"
-    if f.exists():
-        return FileResponse(str(f))
-    return RedirectResponse(url="/")
+@app.get("/{path:path}", include_in_schema=False)
+def serve_web_app(path: str):
+    if path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not found")
+    index = WEB_DIST / "index.html"
+    if not index.exists():
+        return HTMLResponse("<h1>SmartCart API is running.</h1><p>The web app has not been built.</p>")
+    candidate = (WEB_DIST / path).resolve()
+    if path and candidate.is_file() and candidate.is_relative_to(WEB_DIST.resolve()):
+        # Vite fingerprints everything under assets/, so it can be cached forever.
+        cache = "public, max-age=31536000, immutable" if path.startswith("assets/") else "no-cache"
+        return FileResponse(candidate, headers={"Cache-Control": cache})
+    # Client-side routes (/plan, /account, ...) all load the app shell.
+    return FileResponse(index, headers={"Cache-Control": "no-cache"})

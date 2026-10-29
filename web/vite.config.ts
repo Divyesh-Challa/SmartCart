@@ -5,7 +5,12 @@ import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 // Locally the API runs on :8000; /api requests from the dev and preview servers are proxied there.
-const apiProxy = { "/api": "http://127.0.0.1:8000", "/healthz": "http://127.0.0.1:8000" };
+const apiProxy = {
+  "/api": "http://127.0.0.1:8000",
+  "/healthz": "http://127.0.0.1:8000",
+  "/config.js": "http://127.0.0.1:8000",
+  "/static/uploads": "http://127.0.0.1:8000",
+};
 
 export default defineConfig({
   plugins: [
@@ -30,7 +35,7 @@ export default defineConfig({
       workbox: {
         navigateFallback: "/index.html",
         // API responses are never cached by the service worker: prices must be current.
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/static\//],
         runtimeCaching: [],
       },
     }),
