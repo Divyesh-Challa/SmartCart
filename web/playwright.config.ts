@@ -15,7 +15,8 @@ export default defineConfig({
   timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"]],
-  use: { baseURL: `http://127.0.0.1:${PORT}`, screenshot: "only-on-failure", trace: "retain-on-failure" },
+  // Shoppers (and the server's calendar) are in Edmonton; CI machines run on UTC.
+  use: { baseURL: `http://127.0.0.1:${PORT}`, timezoneId: "America/Edmonton", screenshot: "only-on-failure", trace: "retain-on-failure" },
   projects: [{ name: "mobile", use: { ...devices["Pixel 7"] } }],
   webServer: {
     command: `rm -f "${dbPath}"* && cd .. && ${python} -m uvicorn smartcart.main:app --port ${PORT}`,
