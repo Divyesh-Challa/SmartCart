@@ -153,8 +153,11 @@ def main() -> None:
         render(client, "PUT", f"/services/{service['id']}/env-vars", json=env_vars(settings, service_url))
         allow_supabase_redirect(settings, service_url)
 
-        deploy = render(client, "POST", f"/services/{service['id']}/deploys", json={"clearCache": "do_not_clear"})
-        status = wait_for_deploy(client, service["id"], deploy["id"])
+        # Render answers 202 with no body when a deploy is already queued (a new
+        # service starts one itself), so follow the latest deploy either way.
+        render(client, "POST", f"/services/{service['id']}/deploys", json={"clearCache": "do_not_clear"})
+        latest = render(client, "GET", f"/services/{service['id']}/deploys", params={"limit": 1})[0]["deploy"]
+        status = wait_for_deploy(client, service["id"], latest["id"])
         print(f"Deploy finished: {status}. Site: {service_url}")
         if status != "live":
             sys.exit(1)
