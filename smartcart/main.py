@@ -25,6 +25,7 @@ import httpx
 from smartcart.database import (
     PRICE_OBSERVATION_WINDOW_DAYS,
     bootstrap_database,
+    close_pools,
     get_connection,
     haversine_distance_km,
 )
@@ -73,6 +74,7 @@ async def lifespan(app: FastAPI):
     yield
     if worker is not None:
         worker.cancel()
+    close_pools()
 
 
 app = FastAPI(
@@ -1135,7 +1137,8 @@ def multi_store_price_comparison(
         if nearby_store_ids:
             placeholders = ",".join("?" * len(nearby_store_ids))
             c.execute(f"""
-                SELECT si.price, si.unit_price, si.in_stock, s.id as store_id, s.name as store_name, s.banner, s.address, s.city, s.latitude, s.longitude
+                SELECT si.price, si.unit_price, si.in_stock, si.observation_count, si.last_observed_at,
+                       s.id as store_id, s.name as store_name, s.banner, s.address, s.city, s.latitude, s.longitude
                 FROM store_inventory si
                 JOIN stores s ON s.id = si.store_id
                 WHERE si.product_id = ? AND s.id IN ({placeholders})
@@ -1158,23 +1161,28 @@ def multi_store_price_comparison(
             if b not in banner_stores or inv["price"] < banner_stores[b]["price"]:
                 banner_stores[b] = inv
 
-        # Include local flyer deals
+        # Include flyer deals, but only at a real nearby store of that chain.
         for b, deal in deal_for_prod.items():
             if b not in banner_stores and deal.get("sale_price"):
-                matched_local_store = next((s for s in nearby_stores if s["banner"].lower() == b.lower()), None)
+                local = [s for s in nearby_stores if s["banner"].lower() == b.lower()]
+                if not local:
+                    continue
+                nearest = min(local, key=lambda s: s["distance_km"])
                 banner_stores[b] = {
-                    "store_id": matched_local_store["id"] if matched_local_store else deal.get("id", 0),
-                    "store_name": matched_local_store["name"] if matched_local_store else (deal.get("store_name") or f"{b} {target_city}").strip(),
-                    "address": matched_local_store["address"] if matched_local_store else f"{target_city}",
-                    "city": target_city,
-                    "distance_km": matched_local_store["distance_km"] if matched_local_store else 2.5,
+                    "store_id": nearest["id"],
+                    "store_name": nearest["name"],
+                    "address": nearest["address"],
+                    "city": nearest.get("city") or target_city,
+                    "distance_km": nearest["distance_km"],
                     "banner": b,
-                    "price": deal["sale_price"]
+                    "price": deal["sale_price"],
+                    "observation_count": 0,
+                    "last_observed_at": None,
                 }
 
         stores_list = []
         pkg_qty = prod["package_quantity"] or 1.0
-        pkg_unit = prod["package_unit"] or "unit"
+        pkg_unit = (prod["package_unit"] or "unit").lower()
 
         for b, st in banner_stores.items():
             price = st["price"]
@@ -1211,8 +1219,8 @@ def multi_store_price_comparison(
                 "distance_km": st_dist,
                 "distance_display": f"{st_dist} km away" if st_dist is not None else "",
                 "banner": b,
-                "item_title": f"{prod['brand'] or 'Quality'} {prod['name']}",
-                "brand": prod["brand"] or "Canadian Brand",
+                "item_title": f"{prod['brand']} {prod['name']}" if prod["brand"] and prod["brand"] != "Generic" else prod["name"],
+                "brand": prod["brand"],
                 "price": price,
                 "unit_price": round(unit_price_val, 2),
                 "unit_price_display": unit_display,
@@ -1221,8 +1229,10 @@ def multi_store_price_comparison(
                 "is_on_sale": bool(deal),
                 "flyer_deal": {
                     "discount_text": deal["discount_text"],
-                    "valid_until": deal.get("valid_until", "2026-10-14")
-                } if deal else None
+                    "valid_until": deal.get("valid_until"),
+                } if deal else None,
+                "observation_count": st.get("observation_count", 0),
+                "last_observed_at": st.get("last_observed_at"),
             })
 
         stores_list.sort(key=lambda x: (x["price"], x.get("distance_km") or 999))

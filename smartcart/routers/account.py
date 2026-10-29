@@ -45,6 +45,7 @@ def get_me(user: CurrentUser = Depends(get_current_user)):
     conn = get_connection()
     try:
         profile = _profile(conn, user.id)
+        profile["has_full_access"] = user.has_full_access
         profile["price_reports"] = conn.execute(
             "SELECT COUNT(*) AS n FROM price_observations WHERE submitted_by = ?", (user.id,)
         ).fetchone()["n"]

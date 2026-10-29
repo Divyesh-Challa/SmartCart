@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # Optional: lets account deletion also remove the Supabase auth user.
     supabase_service_role_key: Optional[str] = None
 
+    # Accounts signing in with these (Supabase-verified) emails become admins with
+    # full access. JSON list, e.g. ["owner@example.com"].
+    admin_emails: List[str] = Field(default_factory=list)
+
     # Interim content-management guard (flyer uploads) until admin roles exist.
     admin_token: Optional[str] = None
 

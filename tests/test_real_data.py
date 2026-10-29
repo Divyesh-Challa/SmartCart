@@ -78,6 +78,17 @@ class TestStoreData(RealDataTestCase):
         self.assertTrue(all(r["requires_membership"] == 1 for r in rows))
 
 
+class TestDatabaseLockdown(RealDataTestCase):
+    @unittest.skipUnless(database.is_postgres(), "row-level security applies to Postgres only")
+    def test_every_table_has_row_level_security(self):
+        rows = self.conn.execute(
+            "SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public'"
+        ).fetchall()
+        self.assertTrue(rows)
+        unprotected = [r["tablename"] for r in rows if not r["rowsecurity"]]
+        self.assertEqual(unprotected, [], "New tables must enable RLS (see migration 0004)")
+
+
 class TestPriceObservations(RealDataTestCase):
     def setUp(self):
         super().setUp()
