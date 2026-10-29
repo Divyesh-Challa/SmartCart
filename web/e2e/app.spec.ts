@@ -3,6 +3,16 @@ import { setLocation, signIn } from "./session";
 
 const shots = (name: string) => ({ path: `e2e-screenshots/${name}.png`, fullPage: true });
 
+// Any Content-Security-Policy violation fails the test, so the policy can't silently break a feature.
+let violations: string[] = [];
+test.beforeEach(async ({ page }) => {
+  violations = [];
+  page.on("console", (msg) => {
+    if (/Content Security Policy|Refused to/i.test(msg.text())) violations.push(msg.text());
+  });
+});
+test.afterEach(() => expect(violations).toEqual([]));
+
 test("home sets a location and shows real store coverage", async ({ page }) => {
   await setLocation(page);
   await expect(page.getByText(/Edmonton-area stores/)).toBeVisible();
@@ -52,6 +62,23 @@ test("a shopper adds a price, sees it in Compare, and gets a trip plan", async (
   // One store with one price: all three plans match, so they're shown as one card.
   await expect(page.getByRole("heading", { level: 2 })).toHaveCount(1);
   await page.screenshot(shots("05-plan"));
+});
+
+test("a shopper reads a receipt photo and submits the prices", async ({ page }) => {
+  test.setTimeout(120_000); // first run downloads the OCR engine and English data
+  await signIn(page, "receipts@example.com");
+  await setLocation(page);
+  await page.goto("/add-price");
+  const store = page.getByLabel("Store");
+  await expect(store.locator("option").nth(1)).toBeAttached();
+  await store.selectOption({ index: 1 });
+
+  await page.locator('input[type="file"]').setInputFiles("e2e/fixtures/receipt.png");
+  await expect(page.getByRole("button", { name: /Submit 3 prices/ })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByLabel("Price for SALTED BUTTER 454G")).toHaveValue("5.49");
+  await page.screenshot(shots("08-receipt-review"));
+  await page.getByRole("button", { name: /Submit 3 prices/ }).click();
+  await expect(page.getByText("Thanks! 3 added.")).toBeVisible();
 });
 
 test("the owner adds a flyer from the admin screen", async ({ page }) => {

@@ -281,6 +281,12 @@ class TestHttpHardening(ApiTestCase):
         self.assertEqual(res.headers["X-Frame-Options"], "DENY")
         self.assertIn("default-src 'none'", res.headers["Content-Security-Policy"])
 
+    def test_web_pages_get_a_strict_csp(self):
+        csp = self.client.get("/config.js").headers["Content-Security-Policy"]
+        self.assertIn("default-src 'self'", csp)
+        self.assertIn("frame-ancestors 'none'", csp)
+        self.assertNotIn("'unsafe-eval'", csp.replace("'wasm-unsafe-eval'", ""))
+
     def test_healthz(self):
         self.assertEqual(self.client.get("/healthz").json(), {"status": "ok"})
 

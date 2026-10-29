@@ -24,6 +24,33 @@ limiter = Limiter(
 )
 
 
+# On-device receipt OCR (Tesseract.js) loads its worker, WebAssembly core and
+# language data from jsDelivr, and starts the worker from a blob: URL.
+OCR_CDN = "https://cdn.jsdelivr.net"
+PRODUCT_IMAGES = "https://images.openfoodfacts.org"
+
+
+def web_app_csp() -> str:
+    """Content-Security-Policy for the web app's pages: only our own code, plus the few services it needs."""
+    connect = ["'self'", OCR_CDN]
+    supabase = get_settings().supabase_url
+    if supabase:
+        origin = supabase.rstrip("/")
+        connect += [origin, origin.replace("https://", "wss://", 1)]
+    return "; ".join([
+        "default-src 'self'",
+        f"script-src 'self' {OCR_CDN} 'wasm-unsafe-eval'",
+        "worker-src 'self' blob:",
+        f"connect-src {' '.join(connect)}",
+        f"img-src 'self' data: blob: {PRODUCT_IMAGES}",
+        "style-src 'self' 'unsafe-inline'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    ])
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
@@ -34,6 +61,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if request.url.path.startswith("/api/"):
             response.headers.setdefault("Cache-Control", "no-store")
             response.headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+        else:
+            response.headers.setdefault("Content-Security-Policy", web_app_csp())
         if get_settings().is_production:
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         return response
