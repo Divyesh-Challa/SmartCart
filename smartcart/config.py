@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     supabase_url: Optional[str] = None
     supabase_jwt_secret: Optional[str] = None
     supabase_jwt_audience: str = "authenticated"
+    # Public (anon) key, handed to the web app at runtime via /config.js.
+    supabase_anon_key: Optional[str] = None
 
     # Optional: lets account deletion also remove the Supabase auth user.
     supabase_service_role_key: Optional[str] = None
@@ -38,6 +40,8 @@ class Settings(BaseSettings):
     admin_token: Optional[str] = None
 
     cors_origins: List[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"])
+    # Where the built web app lives; defaults to web/dist next to the package.
+    web_dist: Optional[str] = None
     sentry_dsn: Optional[str] = None
     sentry_traces_sample_rate: float = 0.0
 

@@ -1,44 +1,36 @@
-# Render blueprint: API web service + background worker. Secrets are set in the
-# Render dashboard (sync: false), never in this file.
+# Render blueprint: one web service that runs the API and serves the web app.
+# Secrets are set in the Render dashboard (sync: false), never in this file.
 services:
   - type: web
-    name: smartcart-api
+    name: smartcart-app
     runtime: docker
     plan: free
+    # Virginia is Render's closest region to the Supabase database (Montreal).
+    region: virginia
     healthCheckPath: /healthz
     autoDeploy: false
     envVars:
       - key: SMARTCART_ENVIRONMENT
         value: production
+      # Free plan has no background workers, so the weekly sync runs in the web
+      # process. Keep the service at one instance while this is true.
       - key: SMARTCART_RUN_SCHEDULER
-        value: "false"
+        value: "true"
       - key: SMARTCART_DATABASE_URL
         sync: false
       - key: SMARTCART_SUPABASE_URL
         sync: false
+      - key: SMARTCART_SUPABASE_ANON_KEY
+        sync: false
       - key: SMARTCART_SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SMARTCART_ADMIN_EMAILS
         sync: false
       - key: SMARTCART_ADMIN_TOKEN
         sync: false
       - key: SMARTCART_SENTRY_DSN
         sync: false
+      # The web app is served from the same origin, so CORS only matters for
+      # other clients. JSON list, e.g. ["https://smartcart-app.onrender.com"].
       - key: SMARTCART_CORS_ORIGINS
-        sync: false
-
-  # Background workers are not available on Render's free plan. Until the
-  # worker can run, either set SMARTCART_RUN_SCHEDULER=true on the web service
-  # (single instance only) or schedule `python -m smartcart.scheduler_once`
-  # via a cron job.
-  - type: worker
-    name: smartcart-worker
-    runtime: docker
-    plan: starter
-    dockerCommand: python -m smartcart.worker
-    autoDeploy: false
-    envVars:
-      - key: SMARTCART_ENVIRONMENT
-        value: production
-      - key: SMARTCART_DATABASE_URL
-        sync: false
-      - key: SMARTCART_SENTRY_DSN
         sync: false

@@ -5,6 +5,7 @@ postal code geocoding, Edmonton-wide stores, and interactive weekly digital circ
 """
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -414,22 +415,33 @@ class TestSmartCartEnhancementsTDD(unittest.TestCase):
                 if st.get("city"):
                     self.assertNotIn(st["city"], ["Edmonton", "Calgary", "Toronto"])
 
-    def test_multi_page_companion_routes_serve_html(self):
-        routes = ["/", "/compare", "/flyers", "/meals", "/recipes", "/optimizer", "/scanner", "/savings"]
-        for r in routes:
-            res = self.client.get(r)
-            self.assertEqual(res.status_code, 200, f"Route {r} should return 200")
-            self.assertIn("text/html", res.headers.get("content-type", ""))
-            self.assertIn("SmartCart", res.text)
+    def test_web_app_routes_serve_app_shell(self):
+        import smartcart.main as main_module
+        with tempfile.TemporaryDirectory() as dist:
+            Path(dist, "assets").mkdir()
+            Path(dist, "index.html").write_text("<html><title>SmartCart</title></html>")
+            Path(dist, "assets", "app-abc123.js").write_text("console.log('app')")
+            original = main_module.WEB_DIST
+            main_module.WEB_DIST = Path(dist)
+            try:
+                for route in ["/", "/plan", "/account", "/legal/privacy"]:
+                    res = self.client.get(route)
+                    self.assertEqual(res.status_code, 200, route)
+                    self.assertIn("SmartCart", res.text)
+                asset = self.client.get("/assets/app-abc123.js")
+                self.assertIn("immutable", asset.headers["cache-control"])
+                self.assertEqual(self.client.get("/api/does-not-exist").status_code, 404)
+                # Paths escaping the build folder fall back to the app shell, never the file.
+                outside = self.client.get("/..%2F..%2Fsmartcart%2Fconfig.py")
+                self.assertNotIn("BaseSettings", outside.text)
+            finally:
+                main_module.WEB_DIST = original
 
-    def test_static_assets_exist(self):
-        res_js = self.client.get("/static/js/shared.js")
-        self.assertEqual(res_js.status_code, 200)
-        self.assertIn("AppState", res_js.text)
-
-        res_css = self.client.get("/static/css/shared.css")
-        self.assertEqual(res_css.status_code, 200)
-        self.assertIn("spotlight-card", res_css.text)
+    def test_runtime_config_exposes_only_public_settings(self):
+        res = self.client.get("/config.js")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("window.__SMARTCART_CONFIG__", res.text)
+        self.assertNotIn("service", res.text.lower())
 
 if __name__ == "__main__":
     unittest.main()
