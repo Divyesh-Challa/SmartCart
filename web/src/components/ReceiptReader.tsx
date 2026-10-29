@@ -76,10 +76,9 @@ export default function ReceiptReader({ storeId, date }: { storeId: string; date
       <h2 className="font-bold">{t.receipt.title}</h2>
       <p className="text-sm text-slate-600 dark:text-slate-400">{t.receipt.intro}</p>
       {!ready && <Notice>{t.receipt.chooseStoreFirst}</Notice>}
-      <label className={`block ${ready ? "" : "pointer-events-none opacity-50"}`}>
-        <span className="sr-only">{t.receipt.choose}</span>
-        <input type="file" accept="image/*" capture="environment" disabled={!ready || progress !== null} onChange={onFile}
-          className="block w-full text-sm file:mr-3 file:min-h-11 file:rounded-xl file:border-0 file:bg-brand-700 file:px-4 file:font-semibold file:text-white" />
+      <label className={`flex min-h-11 w-full cursor-pointer items-center justify-center rounded-xl border border-brand-700 px-4 font-semibold text-brand-700 focus-within:ring-2 focus-within:ring-brand-700 dark:text-brand-100 ${ready && progress === null ? "" : "pointer-events-none opacity-50"}`}>
+        {t.receipt.choose}
+        <input type="file" accept="image/*" capture="environment" disabled={!ready || progress !== null} onChange={onFile} className="sr-only" />
       </label>
       {progress !== null && <p aria-live="polite" className="text-sm">{t.receipt.reading(Math.round(progress * 100))}</p>}
       {error && <Notice tone="error">{error}</Notice>}

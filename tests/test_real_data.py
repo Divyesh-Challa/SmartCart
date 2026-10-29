@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from fastapi.testclient import TestClient
 
 import smartcart.database as database
+from smartcart.config import local_today
 from smartcart import flyers_service
 from smartcart.main import app
 from tests.auth_utils import auth_headers
@@ -137,7 +138,7 @@ class TestPriceImportScript(RealDataTestCase):
 
         database.load_real_stores(self.conn, "edmonton")
         osm_id = self.conn.execute("SELECT osm_id FROM stores ORDER BY id LIMIT 1").fetchone()["osm_id"]
-        today = datetime.date.today().isoformat()
+        today = local_today().isoformat()
         rows = [
             {"store_osm_id": osm_id, "item": "salted butter", "price": "5.99", "observed_at": today, "source": "receipt"},
             {"store_osm_id": osm_id, "item": "dozen eggs", "price": "4.29", "observed_at": today},
@@ -176,7 +177,7 @@ class TestPurgeUnsourcedData(RealDataTestCase):
 
 class TestDatabaseFlyers(RealDataTestCase):
     def test_only_currently_valid_flyers_are_returned(self):
-        today = datetime.date.today()
+        today = local_today()
         cur = self.conn.cursor()
         cur.execute("INSERT INTO flyers (banner, title, valid_from, valid_to) VALUES ('No Frills', 'Current', ?, ?)",
                     ((today - datetime.timedelta(days=1)).isoformat(), (today + datetime.timedelta(days=5)).isoformat()))

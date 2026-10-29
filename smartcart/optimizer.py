@@ -13,6 +13,7 @@ import datetime
 import math
 import time
 from itertools import combinations, permutations
+from smartcart.config import local_today
 from smartcart.database import get_connection, haversine_distance_km
 from smartcart.normalizer import match_product_in_catalog, compute_packages_needed
 
@@ -23,6 +24,11 @@ DEFAULT_FUEL_EFFICIENCY_L_100KM = 9.5     # Litres / 100 km (urban driving avera
 DEFAULT_GAS_COST_PER_KM = round((DEFAULT_FUEL_EFFICIENCY_L_100KM / 100.0) * DEFAULT_GAS_PRICE_PER_LITRE, 4)  # ~$0.1349 / km
 
 
+def estimate_drive_minutes(round_trip_km: float) -> int:
+    """City driving at about 30 km/h (2 min per km), and never under 4 minutes."""
+    return max(4, round(round_trip_km * 2.0))
+
+
 def apply_flyer_deals(cursor, product_id: int, candidate_stores: List[Dict[str, Any]],
                       prices: Dict[int, Dict[str, Any]], today: Optional[datetime.date] = None) -> None:
     """
@@ -30,7 +36,7 @@ def apply_flyer_deals(cursor, product_id: int, candidate_stores: List[Dict[str, 
     beats the shopper-reported price (or there is none). Flyers are entered per
     chain, so a deal applies to all of that banner's stores while it is valid.
     """
-    day = (today or datetime.date.today()).isoformat()
+    day = (today or local_today()).isoformat()
     cursor.execute("""
         SELECT f.banner, MIN(d.sale_price) AS sale_price, MAX(f.valid_to) AS valid_to
         FROM flyer_deals d JOIN flyers f ON f.id = d.flyer_id
@@ -272,7 +278,7 @@ class BasketOptimizer:
                         "all_in_cost": all_in_cost,
                         "distance_km": one_way_km,
                         "total_distance_km": round_trip_km,
-                        "drive_time_minutes": max(4, round(round_trip_km * 2.0)),
+                        "drive_time_minutes": estimate_drive_minutes(round_trip_km),
                         "gas_price_per_litre": self.gas_price_per_litre,
                         "fuel_efficiency_l_100km": self.fuel_efficiency_l_100km,
                         "items": item_breakdown,
@@ -481,7 +487,7 @@ class BasketOptimizer:
                         "all_in_cost": all_in_cost,
                         "distance_km": round(max(s["distance_km"] for s in store_subset), 2),
                         "total_distance_km": round_trip_km,
-                        "drive_time_minutes": max(6, round(round_trip_km * 2.0)),
+                        "drive_time_minutes": estimate_drive_minutes(round_trip_km),
                         "gas_price_per_litre": self.gas_price_per_litre,
                         "fuel_efficiency_l_100km": self.fuel_efficiency_l_100km,
                         "items": subset_items,

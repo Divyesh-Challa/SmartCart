@@ -1,4 +1,4 @@
-import { formatFreshness, formatPrice, normalizePostalCode } from "./format";
+import { formatFreshness, formatPrice, localDate, normalizePostalCode } from "./format";
 
 describe("formatPrice", () => {
   it("formats CAD and shows a dash for missing prices", () => {
@@ -28,5 +28,13 @@ describe("normalizePostalCode", () => {
   it("rejects invalid codes", () => {
     expect(normalizePostalCode("12345")).toBeNull();
     expect(normalizePostalCode("D6E 2A1")).toBeNull();
+  });
+});
+
+describe("localDate", () => {
+  it("uses the local calendar, not UTC", () => {
+    const lateEvening = new Date(2026, 9, 28, 23, 30);
+    expect(localDate(0, lateEvening)).toBe("2026-10-28");
+    expect(localDate(6, lateEvening)).toBe("2026-11-03");
   });
 });

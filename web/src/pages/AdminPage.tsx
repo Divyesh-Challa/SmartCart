@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api, postJson, type Flyer, type PendingObservation, type Profile } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { formatFreshness, formatPrice } from "../lib/format";
+import { formatFreshness, formatPrice, localDate } from "../lib/format";
 import { t } from "../i18n/en";
 import { Button, Card, Notice, PageTitle, SelectInput, TextInput } from "../components/ui";
 
-const today = () => new Date().toISOString().slice(0, 10);
-const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+const today = () => localDate();
+const inDays = (n: number) => localDate(n);
 
 export interface ParsedDeal { title: string; category: string; sale_price: number; original_price?: number }
 

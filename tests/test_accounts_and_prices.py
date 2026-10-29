@@ -8,6 +8,7 @@ import unittest
 
 from fastapi.testclient import TestClient
 
+from smartcart.config import local_today
 from smartcart import database
 from smartcart.main import app
 from smartcart.security import limiter
@@ -24,7 +25,7 @@ class ApiTestCase(RealDataTestCase):
         self.client = TestClient(app)
         self.store_id = self.first_store_id()
         self.butter = self.product_id("Salted Butter")
-        self.today = datetime.date.today().isoformat()
+        self.today = local_today().isoformat()
 
     def submit(self, headers, **overrides):
         body = {"store_id": self.store_id, "price": 5.49, "item_name": "salted butter",
@@ -75,9 +76,9 @@ class TestPriceSubmissions(ApiTestCase):
         h = auth_headers("shopper-2")
         self.assertEqual(self.submit(h, price=0.01).status_code, 422)
         self.assertEqual(self.submit(h, store_id=999999).status_code, 404)
-        future = (datetime.date.today() + datetime.timedelta(days=5)).isoformat()
+        future = (local_today() + datetime.timedelta(days=5)).isoformat()
         self.assertEqual(self.submit(h, observed_on=future).status_code, 422)
-        old = (datetime.date.today() - datetime.timedelta(days=60)).isoformat()
+        old = (local_today() - datetime.timedelta(days=60)).isoformat()
         self.assertEqual(self.submit(h, observed_on=old).status_code, 422)
         self.assertEqual(self.submit(h, item_name="xyzzy widget").status_code, 422)
 
@@ -204,7 +205,7 @@ class TestAdminFlyers(ApiTestCase):
     def flyer(self, **overrides):
         body = {
             "banner": "No Frills", "title": "Weekly Flyer",
-            "valid_from": self.today, "valid_to": (datetime.date.today() + datetime.timedelta(days=6)).isoformat(),
+            "valid_from": self.today, "valid_to": (local_today() + datetime.timedelta(days=6)).isoformat(),
             "deals": [{"title": "Salted Butter 454g", "category": "Dairy", "sale_price": 4.99, "original_price": 6.99}],
         }
         body.update(overrides)

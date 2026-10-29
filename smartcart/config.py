@@ -3,7 +3,9 @@ SmartCart runtime configuration, read from environment variables (and a local
 .env file in development). See .env.example for every supported setting.
 """
 
+import datetime
 from functools import lru_cache
+from zoneinfo import ZoneInfo
 from typing import List, Optional
 
 from pydantic import Field
@@ -20,6 +22,8 @@ class Settings(BaseSettings):
     database_url: Optional[str] = None
     db_path: str = "smartcart.db"
     region: str = "edmonton"
+    # The market's local time zone: "today" for flyers and price dates follows the shoppers' calendar.
+    timezone: str = "America/Edmonton"
 
     # Supabase Auth. Tokens are verified with the project's JWKS (asymmetric keys)
     # or, for legacy projects, the shared JWT secret.
@@ -62,3 +66,8 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def local_today() -> datetime.date:
+    """Today's date where the shoppers are (the server itself usually runs on UTC)."""
+    return datetime.datetime.now(ZoneInfo(get_settings().timezone)).date()
