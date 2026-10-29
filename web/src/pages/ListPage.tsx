@@ -1,14 +1,12 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { loadList, saveList, type ListItem } from "../lib/storage";
+import { useShoppingList } from "../lib/shoppingList";
 import { t } from "../i18n/en";
 import { Button, Card, PageTitle } from "../components/ui";
 
 export default function ListPage() {
-  const [items, setItems] = useState<ListItem[]>(loadList);
+  const { items, setItems, status } = useShoppingList();
   const [name, setName] = useState("");
-
-  useEffect(() => saveList(items), [items]);
 
   function add(e: FormEvent) {
     e.preventDefault();
@@ -24,6 +22,7 @@ export default function ListPage() {
   return (
     <>
       <PageTitle>{t.list.title}</PageTitle>
+      <p className="-mt-2 text-xs text-slate-500" aria-live="polite">{t.list.sync[status]}</p>
       <form onSubmit={add} className="flex gap-2">
         <label htmlFor="new-item" className="sr-only">{t.list.itemPlaceholder}</label>
         <input id="new-item" value={name} onChange={(e) => setName(e.target.value)} placeholder={t.list.itemPlaceholder}

@@ -7,12 +7,29 @@ import { Card, Notice, PageTitle, Spinner } from "../components/ui";
 
 const PLAN_ORDER = ["plan_1_split", "plan_2_single", "plan_3_stock"];
 
-function PlanCard({ planKey, plan }: { planKey: string; plan: Plan }) {
+const planSignature = (plan: Plan) =>
+  JSON.stringify(plan.stores.map((st) => [st.store_name, st.address, st.items.map((it) => [it.item_name, it.total_cost])]));
+
+/** Plans that come out identical (common for short lists) are shown once, under all their names. */
+export function groupIdenticalPlans(plans: (readonly [string, Plan])[]): { keys: string[]; plan: Plan }[] {
+  const groups: { keys: string[]; plan: Plan; sig: string }[] = [];
+  for (const [key, plan] of plans) {
+    const sig = planSignature(plan);
+    const same = groups.find((g) => g.sig === sig);
+    if (same) same.keys.push(key);
+    else groups.push({ keys: [key], plan, sig });
+  }
+  return groups.map(({ keys, plan }) => ({ keys, plan }));
+}
+
+function PlanCard({ planKeys, plan }: { planKeys: string[]; plan: Plan }) {
   return (
     <Card className="space-y-3">
       <div>
-        <h2 className="text-lg font-bold">{t.plan.planNames[planKey]}</h2>
-        <p className="text-sm text-slate-600 dark:text-slate-400">{t.plan.planHints[planKey]}</p>
+        <h2 className="text-lg font-bold">{planKeys.map((k) => t.plan.planNames[k]).join(" · ")}</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          {planKeys.length > 1 ? t.plan.sameForAll : t.plan.planHints[planKeys[0]]}
+        </p>
       </div>
       <dl className="grid grid-cols-3 gap-2 text-center">
         <div><dt className="text-xs text-slate-500">{t.plan.grocery}</dt><dd className="font-semibold">{formatPrice(plan.grocery_cost)}</dd></div>
@@ -36,8 +53,18 @@ function PlanCard({ planKey, plan }: { planKey: string; plan: Plan }) {
             </div>
             <ul className="mt-2 space-y-1 text-sm">
               {st.items.map((it) => (
-                <li key={it.requested} className="flex justify-between">
-                  <span>{it.packages} × {it.item_name}</span>
+                <li key={it.requested} className="flex justify-between gap-2">
+                  <span>
+                    {it.packages} × {it.item_name}
+                    {it.reported_at && !it.on_sale && (
+                      <span className="block text-xs text-slate-500">{t.plan.reportedAt(it.reported_at)}</span>
+                    )}
+                    {it.on_sale && (
+                      <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
+                        {t.plan.onSale(it.sale_ends ?? "")}
+                      </span>
+                    )}
+                  </span>
                   <span>{formatPrice(it.total_cost)}</span>
                 </li>
               ))}
@@ -83,7 +110,7 @@ export default function PlanPage() {
       {result && result.unmatched_items.length > 0 && (
         <Notice>{t.plan.unmatched(result.unmatched_items.map((u) => u.query).join(", "))}</Notice>
       )}
-      {plans.map(([key, plan]) => <PlanCard key={key} planKey={key} plan={plan} />)}
+      {groupIdenticalPlans(plans).map(({ keys, plan }) => <PlanCard key={keys[0]} planKeys={keys} plan={plan} />)}
       {plans.length > 0 && <p className="text-xs text-slate-500">{t.plan.disclaimer}</p>}
     </>
   );

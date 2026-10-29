@@ -3,3 +3,8 @@ dist
 dev-dist
 .env
 .env.local
+# Tesseract language data downloaded by local OCR checks
+*.traineddata
+e2e-screenshots/
+test-results/
+playwright-report/

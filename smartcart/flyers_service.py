@@ -6,10 +6,10 @@ by an admin or will arrive through a licensed flyer data feed; nothing here
 calls third-party flyer APIs, and nothing is invented when no flyer is on file.
 """
 
-import datetime
 import re
 from typing import List, Dict, Any
 
+from smartcart.config import local_today
 from smartcart.database import get_connection
 
 # Supported Canadian Regions & Cities with their primary postal codes
@@ -168,7 +168,7 @@ def get_city_for_postal_code(postal_code_or_city: str) -> Dict[str, Any]:
 
 
 def _today() -> str:
-    return datetime.date.today().isoformat()
+    return local_today().isoformat()
 
 
 def fetch_live_flyers(postal_code_or_city: str = "T5K2X4") -> List[Dict[str, Any]]:

@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
 
 export function PageTitle({ children }: { children: ReactNode }) {
   return <h1 className="text-2xl font-bold tracking-tight">{children}</h1>;
@@ -30,6 +30,22 @@ export function TextInput({ label, id, ...props }: InputHTMLAttributes<HTMLInput
         className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base dark:border-slate-700 dark:bg-slate-900"
         {...props}
       />
+    </label>
+  );
+}
+
+export function SelectInput({ label, id, options, ...props }: SelectHTMLAttributes<HTMLSelectElement> & { label: string; id: string; options: string[] }) {
+  return (
+    <label htmlFor={id} className="block">
+      <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{label}</span>
+      <select
+        id={id}
+        className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base dark:border-slate-700 dark:bg-slate-900"
+        {...props}
+      >
+        <option value="" disabled>—</option>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
     </label>
   );
 }

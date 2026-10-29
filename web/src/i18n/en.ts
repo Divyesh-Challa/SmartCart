@@ -29,6 +29,12 @@ export const en = {
     remove: (name: string) => `Remove ${name}`,
     plan: "Find the cheapest trip",
     clear: "Clear list",
+    sync: {
+      local: "Saved on this device. Sign in to keep it on all your devices.",
+      syncing: "Saving to your account…",
+      synced: "Saved to your account.",
+      error: "Couldn't reach your account. Your list is still saved on this device.",
+    },
   },
   plan: {
     title: "Your trip plans",
@@ -41,6 +47,8 @@ export const en = {
     total: "Total",
     stops: (n: number) => `${n} ${n === 1 ? "stop" : "stops"}`,
     directions: "Directions",
+    reportedAt: (store: string) => `Price seen at ${store}`,
+    onSale: (until: string) => (until ? `Flyer price to ${until}` : "Flyer price"),
     unmatched: (items: string) => `We couldn't match: ${items}`,
     planNames: {
       plan_1_split: "Lowest total",
@@ -52,6 +60,7 @@ export const en = {
       plan_2_single: "The best single store, fuel included.",
       plan_3_stock: "Every item has a recent reported price at this store.",
     } as Record<string, string>,
+    sameForAll: "For this list, these options all come out the same.",
     disclaimer: "Prices are reported by shoppers and may have changed. Always check the shelf price.",
   },
   compare: {
@@ -61,6 +70,7 @@ export const en = {
     none: "No recent prices for that item near you yet.",
     lowest: "Lowest",
     reports: (n: number) => `${n} ${n === 1 ? "report" : "reports"}`,
+    reportedAt: (store: string) => `Price reported at ${store}`,
     flyer: "Flyer deal",
   },
   addPrice: {
@@ -80,6 +90,25 @@ export const en = {
     thanks: "Thanks! Your price is now helping other shoppers.",
     pending: "Thanks! That price looks unusual, so we'll check it before it's shown.",
     signIn: "Sign in to add prices.",
+  },
+  receipt: {
+    title: "Read a receipt photo",
+    intro: "Take a photo of your receipt and we'll pick out the prices. The photo is read on your phone and isn't uploaded.",
+    chooseStoreFirst: "Choose the store and date above first.",
+    choose: "Take or choose a photo",
+    reading: (pct: number) => `Reading your receipt… ${pct}%`,
+    nothingFound: "We couldn't find any prices in that photo. Try a flatter, brighter photo.",
+    readFailed: "We couldn't read that photo. You can still add prices one at a time above.",
+    review: "Check each line, fix anything we misread, and untick lines you don't want to share.",
+    include: (name: string) => `Include ${name}`,
+    itemName: "Item",
+    itemPrice: (name: string) => `Price for ${name}`,
+    submit: (n: number) => `Submit ${n} ${n === 1 ? "price" : "prices"}`,
+    sending: "Sending…",
+    summary: (accepted: number, pending: number) =>
+      `Thanks! ${accepted} added${pending ? `, ${pending} waiting for a quick check` : ""}.`,
+    unmatched: (items: string) => `We couldn't match: ${items}. Try adding those above with the catalog search.`,
+    failed: (n: number) => `${n} couldn't be sent. Please try again.`,
   },
   scan: {
     title: "Scan a barcode",
@@ -133,7 +162,7 @@ export const en = {
     dealsLabel: "Deals (one per line: item | category | sale price | regular price)",
     dealsPlaceholder: "Salted Butter 454g | Dairy | 4.99 | 6.99",
     saveFlyer: "Save flyer",
-    flyerSaved: (n: number) => `Flyer saved with ${n} deals.`,
+    flyerSaved: (n: number) => `Flyer saved with ${n} ${n === 1 ? "deal" : "deals"}.`,
     badLine: (n: number) => `Line ${n} needs: item | category | sale price`,
     onFile: "Flyers on file",
     remove: "Remove",

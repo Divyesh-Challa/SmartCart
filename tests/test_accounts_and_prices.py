@@ -8,8 +8,10 @@ import unittest
 
 from fastapi.testclient import TestClient
 
+from smartcart.config import local_today
 from smartcart import database
 from smartcart.main import app
+from smartcart.optimizer import BasketOptimizer
 from smartcart.security import limiter
 from tests.auth_utils import auth_headers, make_token
 from tests.test_real_data import RealDataTestCase
@@ -24,7 +26,7 @@ class ApiTestCase(RealDataTestCase):
         self.client = TestClient(app)
         self.store_id = self.first_store_id()
         self.butter = self.product_id("Salted Butter")
-        self.today = datetime.date.today().isoformat()
+        self.today = local_today().isoformat()
 
     def submit(self, headers, **overrides):
         body = {"store_id": self.store_id, "price": 5.49, "item_name": "salted butter",
@@ -75,9 +77,9 @@ class TestPriceSubmissions(ApiTestCase):
         h = auth_headers("shopper-2")
         self.assertEqual(self.submit(h, price=0.01).status_code, 422)
         self.assertEqual(self.submit(h, store_id=999999).status_code, 404)
-        future = (datetime.date.today() + datetime.timedelta(days=5)).isoformat()
+        future = (local_today() + datetime.timedelta(days=5)).isoformat()
         self.assertEqual(self.submit(h, observed_on=future).status_code, 422)
-        old = (datetime.date.today() - datetime.timedelta(days=60)).isoformat()
+        old = (local_today() - datetime.timedelta(days=60)).isoformat()
         self.assertEqual(self.submit(h, observed_on=old).status_code, 422)
         self.assertEqual(self.submit(h, item_name="xyzzy widget").status_code, 422)
 
@@ -146,6 +148,29 @@ class TestAccount(ApiTestCase):
         self.assertEqual(len(self.client.get(f"/api/stores/{self.store_id}/prices").json()["prices"]), 1)
 
 
+class TestShoppingList(ApiTestCase):
+    def test_list_round_trip_is_private_and_deleted_with_account(self):
+        alice, bob = auth_headers("alice"), auth_headers("bob")
+        self.assertEqual(self.client.get("/api/me/list", headers=alice).json(), {"items": [], "updated_at": None})
+        items = [{"id": "a1", "name": "Salted butter", "quantity": 2}, {"id": "a2", "name": "Eggs", "quantity": 1}]
+        saved = self.client.put("/api/me/list", json={"items": items}, headers=alice)
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(self.client.get("/api/me/list", headers=alice).json()["items"], items)
+        self.assertEqual(self.client.get("/api/me/list", headers=bob).json()["items"], [])
+        self.assertEqual(self.client.get("/api/me/export", headers=alice).json()["shopping_lists"][0]["user_id"], "alice")
+
+        self.client.delete("/api/me", headers=alice)
+        self.assertEqual(self.client.get("/api/me/list", headers=alice).json()["items"], [])
+
+    def test_list_validation(self):
+        h = auth_headers("carol")
+        self.assertEqual(self.client.get("/api/me/list").status_code, 401)
+        too_many = [{"id": str(i), "name": "x", "quantity": 1} for i in range(201)]
+        self.assertEqual(self.client.put("/api/me/list", json={"items": too_many}, headers=h).status_code, 422)
+        bad_qty = [{"id": "1", "name": "milk", "quantity": 0}]
+        self.assertEqual(self.client.put("/api/me/list", json={"items": bad_qty}, headers=h).status_code, 422)
+
+
 class TestOwnerAdmin(ApiTestCase):
     def test_allowlisted_email_becomes_admin_with_full_access(self):
         me = self.client.get("/api/me", headers=auth_headers("owner-id", email="Owner@Example.com")).json()
@@ -181,7 +206,7 @@ class TestAdminFlyers(ApiTestCase):
     def flyer(self, **overrides):
         body = {
             "banner": "No Frills", "title": "Weekly Flyer",
-            "valid_from": self.today, "valid_to": (datetime.date.today() + datetime.timedelta(days=6)).isoformat(),
+            "valid_from": self.today, "valid_to": (local_today() + datetime.timedelta(days=6)).isoformat(),
             "deals": [{"title": "Salted Butter 454g", "category": "Dairy", "sale_price": 4.99, "original_price": 6.99}],
         }
         body.update(overrides)
@@ -201,6 +226,29 @@ class TestAdminFlyers(ApiTestCase):
         self.assertEqual(self.client.post("/api/admin/flyers", json=self.flyer(), headers=auth_headers("u")).status_code, 403)
         bad = self.flyer(valid_to="2020-01-01")
         self.assertEqual(self.client.post("/api/admin/flyers", json=bad, headers=ADMIN).status_code, 422)
+
+    def test_unknown_chain_rejected_and_names_canonicalised(self):
+        self.assertEqual(self.client.post("/api/admin/flyers", json=self.flyer(banner="Nofrills"), headers=ADMIN).status_code, 422)
+        self.assertEqual(self.client.post("/api/admin/flyers", json=self.flyer(banner="no frills "), headers=ADMIN).status_code, 201)
+        self.assertEqual(self.client.get("/api/flyers").json()["flyers"][0]["banner"], "No Frills")
+        self.assertIn("No Frills", self.client.get("/api/admin/banners", headers=ADMIN).json()["banners"])
+
+    def test_flyer_deal_lowers_trip_plan_price_at_that_chain(self):
+        stores = self.conn.execute("SELECT id FROM stores WHERE banner = 'No Frills'").fetchall()
+        other = self.conn.execute("SELECT id FROM stores WHERE banner != 'No Frills' LIMIT 1").fetchone()["id"]
+        h = auth_headers("shopper")
+        for store in [stores[0]["id"], other]:
+            self.assertEqual(self.submit(h, store_id=store, price=6.49).status_code, 201)
+        self.assertEqual(self.client.post("/api/admin/flyers", json=self.flyer(), headers=ADMIN).status_code, 201)
+
+        res = self.client.post("/api/optimize", json={"items": [{"name": "salted butter", "quantity": 1}],
+                                                      "postal_code": "T6E 2A1", "max_radius_km": 60})
+        self.assertEqual(res.status_code, 200, res.text)
+        plan = res.json()["plans"]["best_single_run"]
+        item = plan["stores"][0]["items"][0]
+        self.assertEqual(item["package_price"], 4.99)
+        self.assertTrue(item["on_sale"])
+        self.assertEqual(plan["stores"][0]["chain"], "No Frills")
 
     def test_admin_role_on_user_account(self):
         self.client.get("/api/me", headers=auth_headers("staff"))
@@ -226,6 +274,51 @@ class TestCompareHonesty(ApiTestCase):
         self.assertEqual(entry["observation_count"], 1)
         self.assertIsNotNone(entry["last_observed_at"])
 
+    def nofrills(self):
+        return [r["id"] for r in self.conn.execute(
+            "SELECT id FROM stores WHERE banner = 'No Frills' ORDER BY id").fetchall()]
+
+    def test_chain_price_fills_other_stores_with_where_it_was_seen(self):
+        reported, other = self.nofrills()[:2]
+        self.assertEqual(self.submit(auth_headers("chain-user"), store_id=reported, price=5.29).status_code, 201)
+        reported_name = self.conn.execute("SELECT name FROM stores WHERE id = ?", (reported,)).fetchone()["name"]
+
+        basket = BasketOptimizer().prepare_basket_data([{"name": "salted butter", "quantity": 1}],
+                                                       [{"id": other, "banner": "No Frills"}])
+        filled = basket["items"][0]["prices"][other]
+        self.assertEqual(filled["price"], 5.29)
+        self.assertEqual(filled["in_stock"], 0)  # not confirmed at this store
+        self.assertTrue(filled["reported_at"].startswith(reported_name))
+
+    def test_store_own_report_beats_chain_price(self):
+        a, b = self.nofrills()[:2]
+        h = auth_headers("chain-user-2")
+        self.submit(h, store_id=a, price=4.00)
+        self.submit(h, store_id=b, price=6.00)
+        price = BasketOptimizer().prepare_basket_data([{"name": "salted butter"}],
+                                                      [{"id": b, "banner": "No Frills"}])["items"][0]["prices"][b]
+        self.assertEqual(price["price"], 6.00)
+        self.assertIsNone(price.get("reported_at"))
+
+    def test_expired_flyers_and_dearer_deals_are_not_sales(self):
+        self.submit(auth_headers("cmp-2"), price=3.49)
+        banner = self.conn.execute("SELECT banner FROM stores WHERE id = ?", (self.store_id,)).fetchone()["banner"]
+        # A deal pricier than the reported price isn't shown as a sale.
+        self.client.post("/api/admin/flyers", headers=ADMIN, json={
+            "banner": banner, "title": "Flyer", "valid_from": self.today, "valid_to": self.today,
+            "deals": [{"title": "Salted Butter 454g", "category": "Dairy", "sale_price": 3.99}],
+        })
+        # An expired flyer is ignored even though it's cheaper.
+        self.conn.execute("INSERT INTO flyers (banner, title, valid_from, valid_to) VALUES (?, 'Old', '2020-01-01', '2020-01-07')", (banner,))
+        old_id = self.conn.execute("SELECT MAX(id) AS id FROM flyers").fetchone()["id"]
+        self.conn.execute("INSERT INTO flyer_deals (flyer_id, product_id, title, category, sale_price) VALUES (?, ?, 'Salted Butter', 'Dairy', 0.99)",
+                          (old_id, self.butter))
+        self.conn.commit()
+        data = self.client.get("/api/v1/search/compare?q=butter&postal_code=T6E2A1").json()["data"]
+        entry = next(st for st in next(d for d in data if d["product_id"] == self.butter)["stores"] if st["banner"] == banner)
+        self.assertEqual(entry["price"], 3.49)
+        self.assertFalse(entry["is_on_sale"])
+
 
 class TestHttpHardening(ApiTestCase):
     def test_security_headers(self):
@@ -234,12 +327,25 @@ class TestHttpHardening(ApiTestCase):
         self.assertEqual(res.headers["X-Frame-Options"], "DENY")
         self.assertIn("default-src 'none'", res.headers["Content-Security-Policy"])
 
+    def test_web_pages_get_a_strict_csp(self):
+        csp = self.client.get("/config.js").headers["Content-Security-Policy"]
+        self.assertIn("default-src 'self'", csp)
+        self.assertIn("frame-ancestors 'none'", csp)
+        self.assertNotIn("'unsafe-eval'", csp.replace("'wasm-unsafe-eval'", ""))
+
     def test_healthz(self):
         self.assertEqual(self.client.get("/healthz").json(), {"status": "ok"})
 
     def test_oversized_body_rejected(self):
         res = self.client.post("/api/recipes/parse", content=b"x" * (9 * 1024 * 1024),
                                headers={"Content-Type": "application/json"})
+        self.assertEqual(res.status_code, 413)
+
+    def test_oversized_chunked_body_rejected(self):
+        def chunks():
+            for _ in range(10):
+                yield b"x" * (1024 * 1024)
+        res = self.client.post("/api/recipes/parse", content=chunks(), headers={"Content-Type": "application/json"})
         self.assertEqual(res.status_code, 413)
 
     def test_price_submissions_are_rate_limited(self):

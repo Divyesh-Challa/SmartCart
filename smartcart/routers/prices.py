@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from smartcart.auth import CurrentUser, get_current_user
 from smartcart.barcodes import normalize_barcode
-from smartcart.config import get_settings
+from smartcart.config import get_settings, local_today
 from smartcart.database import (
     PRICE_OBSERVATION_WINDOW_DAYS,
     get_connection,
@@ -67,7 +67,7 @@ def _review_status(conn, user: CurrentUser, store_id: int, product_id: Optional[
 def submit_price(request: Request, body: PriceSubmission, user: CurrentUser = Depends(get_current_user)):
     if not MIN_PRICE <= body.price <= MAX_PRICE:
         raise HTTPException(status_code=422, detail=f"Price must be between ${MIN_PRICE:.2f} and ${MAX_PRICE:.0f}.")
-    today = datetime.date.today()
+    today = local_today()
     if body.observed_on > today + datetime.timedelta(days=1):
         raise HTTPException(status_code=422, detail="observed_on can't be in the future.")
     if body.observed_on < today - datetime.timedelta(days=PRICE_OBSERVATION_WINDOW_DAYS):

@@ -63,6 +63,10 @@ export interface PlanItem {
   packages: number;
   total_cost: number;
   store_name: string;
+  on_sale?: boolean;
+  sale_ends?: string | null;
+  /** Set when the price comes from another store of the same chain. */
+  reported_at?: string | null;
 }
 
 export interface PlanStore {
@@ -102,6 +106,8 @@ export interface CompareStore {
   observation_count: number;
   last_observed_at: string | null;
   flyer_deal: { discount_text: string | null; valid_until: string | null } | null;
+  /** Set when the price comes from another store of the same chain. */
+  reported_at?: string | null;
 }
 
 export interface CompareResult {

@@ -26,3 +26,10 @@ export function normalizePostalCode(raw: string): string | null {
   if (!POSTAL_RE.test(compact)) return null;
   return `${compact.slice(0, 3)} ${compact.slice(3)}`;
 }
+
+/** YYYY-MM-DD in the device's own time zone (toISOString would give the UTC date, a day ahead in the evening). */
+export function localDate(offsetDays = 0, now: Date = new Date()): string {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offsetDays);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}

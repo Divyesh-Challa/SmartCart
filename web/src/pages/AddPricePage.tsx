@@ -3,10 +3,12 @@ import { Link } from "react-router-dom";
 import { api, postJson, type Product, type Store } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { loadLocation } from "../lib/storage";
+import { localDate } from "../lib/format";
 import { t } from "../i18n/en";
 import { Button, Card, Notice, PageTitle, TextInput } from "../components/ui";
+import ReceiptReader from "../components/ReceiptReader";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDate();
 
 export default function AddPricePage() {
   const { enabled, session } = useAuth();
@@ -125,6 +127,7 @@ export default function AddPricePage() {
         </form>
         {message && <div className="mt-3"><Notice tone={message.tone}>{message.text}</Notice></div>}
       </Card>
+      <ReceiptReader storeId={storeId} date={date} />
     </>
   );
 }

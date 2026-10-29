@@ -2,7 +2,7 @@
 
 Grocery price comparison and trip planning for the Edmonton area, built on prices that local shoppers report.
 
-> **Status:** closed beta, Edmonton metro only. Not yet deployed from this branch. The roadmap is in [`docs/PROGRESS.md`](docs/PROGRESS.md), and the reasons behind the main choices are in [`docs/adr/`](docs/adr/).
+> **Status:** closed beta, Edmonton metro only. Ready to deploy to Render (see Deployment); not live yet. The roadmap is in [`docs/PROGRESS.md`](docs/PROGRESS.md), and the reasons behind the main choices are in [`docs/adr/`](docs/adr/).
 
 ## Why SmartCart
 
@@ -55,11 +55,12 @@ Given:
 
 ```mermaid
 flowchart LR
-    PWA["web/ React PWA<br/>(Cloudflare Pages)"] -->|HTTPS + Supabase JWT| API["FastAPI API<br/>smartcart/"]
+    PWA["web/ React PWA<br/>(served by the API)"] -->|HTTPS + Supabase JWT| API["FastAPI API<br/>smartcart/"]
     PWA -->|magic-link sign-in| Auth["Supabase Auth"]
     API -->|verify JWT via JWKS| Auth
     API --> DB[("Postgres (Supabase)<br/>SQLite locally")]
-    Worker["smartcart.worker<br/>price cache + gas + alerts"] --> DB
+    Worker["scheduler (in-process on the free plan)<br/>price cache + gas"] --> DB
+    PWA -->|receipt OCR runs on the phone| OCR["Tesseract.js"]
     API --> OFF["Open Food Facts"]
     Import["scripts/import_osm_stores.py"] -->|OpenStreetMap| Data["smartcart/data/*.json"]
 ```
@@ -73,7 +74,9 @@ flowchart LR
 | Schema migrations | `smartcart/migrations/` (Alembic) |
 | Settings | `smartcart/config.py`, `.env.example` |
 | Optimizer, parser, unit normalizer | `smartcart/optimizer.py`, `parser.py`, `normalizer.py` |
-| PWA | `web/` |
+| PWA | `web/` (receipt OCR in `web/src/lib/receipt.ts`) |
+| Browser tests | `web/e2e/` (Playwright) |
+| Deploy | `Dockerfile`, `render.yaml`, `scripts/render_deploy.py` |
 | Test-only synthetic data | `tests/fixtures/` |
 
 ## Local development
@@ -112,14 +115,21 @@ venv/bin/python -m pytest -q                              # SQLite
 docker run -d --name smartcart-pg-test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=smartcart_test -p 55432:5432 postgres:17-alpine
 SMARTCART_TEST_DATABASE_URL=postgresql://postgres:test@localhost:55432/smartcart_test venv/bin/python -m pytest -q
 cd web && npm test && npm run build
+cd web && npx playwright install chromium && npm run e2e   # browser tests against a throwaway API
 ```
 
-CI (`.github/workflows/ci.yml`) runs lint, the API tests on both databases, the Docker build, and the web tests and build.
+CI (`.github/workflows/ci.yml`) runs lint, the API tests on both databases, the Docker build, the web tests and build, and the Playwright browser tests.
 
 ## Deployment
 
-- **API:** `Dockerfile` (non-root, `/healthz` health check). `render.yaml` defines the web service and worker with auto-deploy off; secrets are set in the dashboard. In production set `SMARTCART_RUN_SCHEDULER=false` on the web service and run `python -m smartcart.worker` separately, or use `python -m smartcart.scheduler_once` from a cron job.
-- **PWA:** `cd web && npm run build`, then host `web/dist` as a static site with SPA fallback. Set `VITE_API_URL`, `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` at build time, and add the site's origin to `SMARTCART_CORS_ORIGINS`.
+One Render web service (free plan) runs everything: the Docker image builds the web app and the API serves it, so there is a single address and no CORS setup. The database and sign-in are on Supabase.
+
+1. Add `RENDER_API_KEY=...` to `.env` (Render dashboard > Account Settings > API Keys).
+2. Dry run, which shows what will be created and which settings are synced from `.env`:
+   `venv/bin/python scripts/render_deploy.py --branch <branch>`
+3. Deploy: add `--yes`. The script creates or updates the `smartcart-app` service (Virginia, close to the Montreal database), copies the settings, adds the site's `/account` page to Supabase's sign-in redirect list, deploys, and prints the address.
+
+Migrations run automatically when the app starts. The web app gets its Supabase URL and public key from `/config.js` at runtime, so the same build works anywhere. The free plan sleeps after 15 minutes without visitors, so the first visit after that takes about a minute.
 
 ## Legal
 
