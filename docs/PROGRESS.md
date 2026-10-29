@@ -23,7 +23,7 @@ Work happens in `~/Developer/SmartCart`. The old copy in `~/Documents/Projects/S
 5. `feat/beta-completion`: list sync, flyer prices in plans, receipt OCR, CSP, chunked body limit, local-calendar dates, Playwright E2E
 
 ## Done
-- Real data only: 208 Edmonton stores from OpenStreetMap, 24 catalog products, prices from shoppers and admin-entered flyers.
+- Real data only: 208 Edmonton stores from OpenStreetMap, 153 catalog products, prices from shoppers and admin-entered flyers.
 - Supabase project `smartcart` (ca-central-1): database at migration 0005, magic-link sign-in, owner account is admin.
 - Accounts: profile, CASL consent timestamp, export, deletion (price reports de-identified), shopping list synced across devices.
 - Prices: submission with validation, outlier review, daily cap and rate limit; admin review queue; receipt photos read on the phone (Tesseract.js) and submitted after review.
