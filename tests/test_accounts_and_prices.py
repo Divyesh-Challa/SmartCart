@@ -242,6 +242,13 @@ class TestHttpHardening(ApiTestCase):
                                headers={"Content-Type": "application/json"})
         self.assertEqual(res.status_code, 413)
 
+    def test_oversized_chunked_body_rejected(self):
+        def chunks():
+            for _ in range(10):
+                yield b"x" * (1024 * 1024)
+        res = self.client.post("/api/recipes/parse", content=chunks(), headers={"Content-Type": "application/json"})
+        self.assertEqual(res.status_code, 413)
+
     def test_price_submissions_are_rate_limited(self):
         limiter.enabled = True
         limiter.reset()

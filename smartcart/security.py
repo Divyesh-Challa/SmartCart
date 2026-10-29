@@ -39,10 +39,58 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
-class MaxBodySizeMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
+class MaxBodySizeMiddleware:
+    """
+    Rejects request bodies over SMARTCART_MAX_REQUEST_BYTES with 413. Checks the
+    declared Content-Length up front, and also counts bytes as they arrive so
+    chunked uploads (no Content-Length) can't get past the limit.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
         limit = get_settings().max_request_bytes
-        length = request.headers.get("content-length")
-        if length is not None and length.isdigit() and int(length) > limit:
-            return JSONResponse({"detail": "Request body too large."}, status_code=413)
-        return await call_next(request)
+        declared = dict(scope["headers"]).get(b"content-length", b"")
+        if declared.isdigit() and int(declared) > limit:
+            await self._reject(scope, receive, send)
+            return
+
+        received = 0
+        response_started = False
+        rejected = False
+
+        async def counting_receive():
+            nonlocal received, rejected
+            if rejected:
+                return {"type": "http.disconnect"}
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > limit and not response_started:
+                    # Answer now and tell the app the client went away, so it stops reading.
+                    rejected = True
+                    await self._reject(scope, receive, send)
+                    return {"type": "http.disconnect"}
+            return message
+
+        async def guarded_send(message):
+            nonlocal response_started
+            if rejected:
+                return
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, counting_receive, guarded_send)
+        except Exception:
+            if not rejected:
+                raise
+
+    @staticmethod
+    async def _reject(scope, receive, send):
+        await JSONResponse({"detail": "Request body too large."}, status_code=413)(scope, receive, send)
