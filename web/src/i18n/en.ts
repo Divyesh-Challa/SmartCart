@@ -47,6 +47,7 @@ export const en = {
     total: "Total",
     stops: (n: number) => `${n} ${n === 1 ? "stop" : "stops"}`,
     directions: "Directions",
+    onSale: (until: string) => (until ? `Flyer price to ${until}` : "Flyer price"),
     unmatched: (items: string) => `We couldn't match: ${items}`,
     planNames: {
       plan_1_split: "Lowest total",

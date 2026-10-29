@@ -3,7 +3,7 @@ import { api, postJson, type Flyer, type PendingObservation, type Profile } from
 import { useAuth } from "../lib/auth";
 import { formatFreshness, formatPrice } from "../lib/format";
 import { t } from "../i18n/en";
-import { Button, Card, Notice, PageTitle, TextInput } from "../components/ui";
+import { Button, Card, Notice, PageTitle, SelectInput, TextInput } from "../components/ui";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
@@ -74,6 +74,11 @@ function FlyerManager() {
   const [dealsText, setDealsText] = useState("");
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [flyers, setFlyers] = useState<Flyer[]>([]);
+  const [banners, setBanners] = useState<string[]>([]);
+
+  useEffect(() => {
+    api<{ banners: string[] }>("/api/admin/banners").then((r) => setBanners(r.banners)).catch(() => setBanners([]));
+  }, []);
 
   const load = useCallback(() => {
     api<{ flyers: Flyer[] }>("/api/flyers").then((r) => setFlyers(r.flyers)).catch(() => setFlyers([]));
@@ -104,7 +109,7 @@ function FlyerManager() {
       <Card>
         <h2 className="mb-3 font-bold">{t.admin.flyerTitle}</h2>
         <form onSubmit={save} className="space-y-3">
-          <TextInput id="banner" label={t.admin.banner} required value={banner} onChange={(e) => setBanner(e.target.value)} placeholder="No Frills" />
+          <SelectInput id="banner" label={t.admin.banner} required value={banner} options={banners} onChange={(e) => setBanner(e.target.value)} />
           <TextInput id="flyer-title" label={t.admin.flyerName} required value={title} onChange={(e) => setTitle(e.target.value)} />
           <div className="grid grid-cols-2 gap-3">
             <TextInput id="valid-from" type="date" label={t.admin.validFrom} required value={validFrom} onChange={(e) => setValidFrom(e.target.value)} />

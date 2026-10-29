@@ -63,6 +63,8 @@ export interface PlanItem {
   packages: number;
   total_cost: number;
   store_name: string;
+  on_sale?: boolean;
+  sale_ends?: string | null;
 }
 
 export interface PlanStore {

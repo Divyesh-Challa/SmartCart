@@ -9,6 +9,7 @@ Generates:
 """
 
 from typing import List, Dict, Any, Optional
+import datetime
 import math
 import time
 from itertools import combinations, permutations
@@ -20,6 +21,39 @@ DEFAULT_USER_LON = -113.4938
 DEFAULT_GAS_PRICE_PER_LITRE = 1.42       # CAD / Litre (Edmonton regular fuel benchmark)
 DEFAULT_FUEL_EFFICIENCY_L_100KM = 9.5     # Litres / 100 km (urban driving average)
 DEFAULT_GAS_COST_PER_KM = round((DEFAULT_FUEL_EFFICIENCY_L_100KM / 100.0) * DEFAULT_GAS_PRICE_PER_LITRE, 4)  # ~$0.1349 / km
+
+
+def apply_flyer_deals(cursor, product_id: int, candidate_stores: List[Dict[str, Any]],
+                      prices: Dict[int, Dict[str, Any]], today: Optional[datetime.date] = None) -> None:
+    """
+    Use this week's flyer price at every store of the advertising chain when it
+    beats the shopper-reported price (or there is none). Flyers are entered per
+    chain, so a deal applies to all of that banner's stores while it is valid.
+    """
+    day = (today or datetime.date.today()).isoformat()
+    cursor.execute("""
+        SELECT f.banner, MIN(d.sale_price) AS sale_price, MAX(f.valid_to) AS valid_to
+        FROM flyer_deals d JOIN flyers f ON f.id = d.flyer_id
+        WHERE d.product_id = ? AND f.valid_from <= ? AND f.valid_to >= ?
+        GROUP BY f.banner
+    """, (product_id, day, day))
+    deals = {row["banner"].strip().lower(): dict(row) for row in cursor.fetchall()}
+    if not deals:
+        return
+    for store in candidate_stores:
+        deal = deals.get((store.get("banner") or "").strip().lower())
+        if not deal:
+            continue
+        current = prices.get(store["id"])
+        if current is None or deal["sale_price"] < current["price"]:
+            prices[store["id"]] = {
+                "store_id": store["id"],
+                "price": deal["sale_price"],
+                "unit_price": deal["sale_price"],
+                "in_stock": 1,
+                "on_sale": True,
+                "sale_ends": deal["valid_to"],
+            }
 
 
 class BasketOptimizer:
@@ -147,6 +181,7 @@ class BasketOptimizer:
                 """
                 cursor.execute(sql, [prod["id"]] + store_ids)
                 prices = {row["store_id"]: dict(row) for row in cursor.fetchall()}
+                apply_flyer_deals(cursor, prod["id"], candidate_stores, prices)
             else:
                 prices = {}
 
@@ -210,6 +245,8 @@ class BasketOptimizer:
                     "package_price": p_info["price"],
                     "total_cost": pkg_cost,
                     "in_stock": bool(p_info.get("in_stock", 1)),
+                    "on_sale": bool(p_info.get("on_sale")),
+                    "sale_ends": p_info.get("sale_ends"),
                     "store_id": store_id,
                     "store_name": store["name"],
                     "banner": store["banner"],
@@ -356,6 +393,8 @@ class BasketOptimizer:
                         "package_price": p_info["price"],
                         "total_cost": cost,
                         "in_stock": bool(p_info.get("in_stock", 1)),
+                        "on_sale": bool(p_info.get("on_sale")),
+                        "sale_ends": p_info.get("sale_ends"),
                         "store_id": s_id,
                         "store_name": s_meta["name"],
                         "banner": s_meta["banner"],

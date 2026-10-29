@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from smartcart.auth import CurrentUser, require_admin_user
 from smartcart.database import extract_unit_size, get_connection, refresh_inventory_from_observations
+from smartcart.normalizer import match_product_in_catalog
 
 router = APIRouter(tags=["admin"])
 
@@ -65,10 +66,35 @@ class ModerationDecision(BaseModel):
     status: Literal["accepted", "rejected"]
 
 
+def _catalog_product_id(title: str) -> Optional[int]:
+    """Link a flyer line to the catalog product it advertises, so trip plans can use the sale price."""
+    match = match_product_in_catalog(title)
+    return match["id"] if match else None
+
+
+def _store_banners(conn) -> dict:
+    rows = conn.execute("SELECT DISTINCT banner FROM stores WHERE banner IS NOT NULL ORDER BY banner").fetchall()
+    return {r["banner"].strip().lower(): r["banner"] for r in rows}
+
+
+@router.get("/api/admin/banners")
+def list_banners(admin: Optional[CurrentUser] = Depends(require_admin_user)):
+    """Store chains we have locations for; a flyer's banner must be one of these."""
+    conn = get_connection()
+    try:
+        return {"banners": list(_store_banners(conn).values())}
+    finally:
+        conn.close()
+
+
 @router.post("/api/admin/flyers", status_code=201)
 def create_flyer(body: FlyerIn, admin: Optional[CurrentUser] = Depends(require_admin_user)):
     conn = get_connection()
     try:
+        banner = _store_banners(conn).get(body.banner.strip().lower())
+        if banner is None:
+            raise HTTPException(status_code=422, detail=f"No stores found for the chain '{body.banner}'. Pick one from the list.")
+        body.banner = banner
         c = conn.cursor()
         c.execute("""
             INSERT INTO flyers (banner, title, total_pages, valid_from, valid_to, badge_text)
@@ -81,7 +107,7 @@ def create_flyer(body: FlyerIn, admin: Optional[CurrentUser] = Depends(require_a
                 discount_text, is_front_page, store_name, unit_size, valid_until
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, [
-            (flyer_id, d.product_id, d.title, d.title, d.category, d.page_number, d.original_price, d.sale_price,
+            (flyer_id, d.product_id or _catalog_product_id(d.title), d.title, d.title, d.category, d.page_number, d.original_price, d.sale_price,
              d.discount_text, 1 if d.is_front_page else 0, body.banner, d.unit_size or extract_unit_size(d.title),
              body.valid_to.isoformat())
             for d in body.deals

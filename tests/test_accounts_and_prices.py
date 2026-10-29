@@ -225,6 +225,29 @@ class TestAdminFlyers(ApiTestCase):
         bad = self.flyer(valid_to="2020-01-01")
         self.assertEqual(self.client.post("/api/admin/flyers", json=bad, headers=ADMIN).status_code, 422)
 
+    def test_unknown_chain_rejected_and_names_canonicalised(self):
+        self.assertEqual(self.client.post("/api/admin/flyers", json=self.flyer(banner="Nofrills"), headers=ADMIN).status_code, 422)
+        self.assertEqual(self.client.post("/api/admin/flyers", json=self.flyer(banner="no frills "), headers=ADMIN).status_code, 201)
+        self.assertEqual(self.client.get("/api/flyers").json()["flyers"][0]["banner"], "No Frills")
+        self.assertIn("No Frills", self.client.get("/api/admin/banners", headers=ADMIN).json()["banners"])
+
+    def test_flyer_deal_lowers_trip_plan_price_at_that_chain(self):
+        stores = self.conn.execute("SELECT id FROM stores WHERE banner = 'No Frills'").fetchall()
+        other = self.conn.execute("SELECT id FROM stores WHERE banner != 'No Frills' LIMIT 1").fetchone()["id"]
+        h = auth_headers("shopper")
+        for store in [stores[0]["id"], other]:
+            self.assertEqual(self.submit(h, store_id=store, price=6.49).status_code, 201)
+        self.assertEqual(self.client.post("/api/admin/flyers", json=self.flyer(), headers=ADMIN).status_code, 201)
+
+        res = self.client.post("/api/optimize", json={"items": [{"name": "salted butter", "quantity": 1}],
+                                                      "postal_code": "T6E 2A1", "max_radius_km": 60})
+        self.assertEqual(res.status_code, 200, res.text)
+        plan = res.json()["plans"]["best_single_run"]
+        item = plan["stores"][0]["items"][0]
+        self.assertEqual(item["package_price"], 4.99)
+        self.assertTrue(item["on_sale"])
+        self.assertEqual(plan["stores"][0]["chain"], "No Frills")
+
     def test_admin_role_on_user_account(self):
         self.client.get("/api/me", headers=auth_headers("staff"))
         self.conn.execute("UPDATE users SET is_admin = 1 WHERE id = 'staff'")
